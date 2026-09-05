@@ -1,0 +1,21 @@
+[package]
+name = "account-decoder-decoders"
+description = "Built-in decoders for common Solana programs (Token, Token-2022, System)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+account-decoder-core = { workspace = true }
+account-decoder-borsh-util = { workspace = true }
+solana-sdk = { workspace = true }
+solana-program = { workspace = true }
+borsh = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+pretty_assertions = { workspace = true }

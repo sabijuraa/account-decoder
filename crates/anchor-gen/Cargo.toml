@@ -1,0 +1,24 @@
+[package]
+name = "account-decoder-anchor-gen"
+description = "Generate decoder implementations from Anchor IDL JSON files"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+account-decoder-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+syn = { workspace = true }
+heck = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+# Parsing generated output back is how we assert it is valid Rust.
+syn = { workspace = true }
+pretty_assertions = { workspace = true }

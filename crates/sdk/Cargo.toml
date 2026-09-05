@@ -1,0 +1,27 @@
+[package]
+name = "account-decoder-sdk"
+description = "Public SDK for the Solana account decoder framework"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[features]
+default = ["builtin-decoders"]
+builtin-decoders = ["account-decoder-decoders"]
+anchor-codegen = ["account-decoder-anchor-gen"]
+full = ["builtin-decoders", "anchor-codegen"]
+
+[dependencies]
+account-decoder-core = { workspace = true }
+account-decoder-borsh-util = { workspace = true }
+account-decoder-decoders = { workspace = true, optional = true }
+account-decoder-anchor-gen = { workspace = true, optional = true }
+solana-sdk = { workspace = true }
+borsh = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+pretty_assertions = { workspace = true }

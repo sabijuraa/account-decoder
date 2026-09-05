@@ -1,0 +1,16 @@
+[package]
+name = "account-decoder-borsh-util"
+description = "Zero-copy Borsh deserialization utilities for high-throughput Solana indexing"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+borsh = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+pretty_assertions = { workspace = true }

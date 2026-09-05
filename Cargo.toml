@@ -1,0 +1,65 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/core",
+    "crates/borsh-util",
+    "crates/anchor-gen",
+    "crates/decoders",
+    "crates/sdk",
+    "anchor-gen-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/example/account-decoder"
+rust-version = "1.75"
+authors = ["Account Decoder Contributors"]
+keywords = ["solana", "decoder", "anchor", "borsh", "blockchain"]
+categories = ["encoding", "parsing", "cryptography::cryptocurrencies"]
+
+[workspace.dependencies]
+# Solana ecosystem
+solana-sdk = "1.18"
+solana-program = "1.18"
+borsh = "1.5"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Code generation
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "2.0", features = ["full", "parsing", "extra-traits"] }
+heck = "0.5"
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Observability
+tracing = "0.1"
+
+# CLI
+clap = { version = "4.5", features = ["derive"] }
+
+# Testing
+proptest = "1.4"
+pretty_assertions = "1.4"
+
+# Internal crates
+account-decoder-core = { path = "crates/core" }
+account-decoder-borsh-util = { path = "crates/borsh-util" }
+account-decoder-anchor-gen = { path = "crates/anchor-gen" }
+account-decoder-decoders = { path = "crates/decoders" }
+account-decoder-sdk = { path = "crates/sdk" }
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3
+
+[profile.dev]
+opt-level = 1

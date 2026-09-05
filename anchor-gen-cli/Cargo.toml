@@ -1,0 +1,24 @@
+[package]
+name = "anchor-gen-cli"
+description = "CLI tool for generating Solana account decoders from Anchor IDL files"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "anchor-gen"
+path = "src/main.rs"
+
+[dependencies]
+account-decoder-anchor-gen = { workspace = true }
+clap = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# Used to parse and pretty-print the generated token stream before writing it.
+syn = { workspace = true }
+quote = { workspace = true }
+prettyplease = "0.2"
