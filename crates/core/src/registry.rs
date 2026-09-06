@@ -142,7 +142,8 @@ impl DecoderRegistry {
 
         self.account_decoders
             .insert(program_id, Arc::new(decoder.clone()));
-        self.instruction_decoders.insert(program_id, Arc::new(decoder));
+        self.instruction_decoders
+            .insert(program_id, Arc::new(decoder));
     }
 
     /// Get an account decoder for a program.
@@ -220,10 +221,7 @@ impl DecoderRegistry {
 
     /// Get information about all registered account decoders.
     pub fn list_account_decoders(&self) -> Vec<DecoderInfo> {
-        self.account_decoders
-            .values()
-            .map(|d| d.info())
-            .collect()
+        self.account_decoders.values().map(|d| d.info()).collect()
     }
 
     /// Get information about all registered instruction decoders.

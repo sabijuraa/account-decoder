@@ -14,9 +14,7 @@
 //! Token-2022 mint.
 
 use account_decoder_core::AccountDecoder;
-use account_decoder_decoders::{
-    RaydiumAmmDecoder, SystemDecoder, Token2022Decoder, TokenDecoder,
-};
+use account_decoder_decoders::{RaydiumAmmDecoder, SystemDecoder, Token2022Decoder, TokenDecoder};
 
 /// Every account decoder, with a name for failure messages.
 fn decoders() -> Vec<(&'static str, Box<dyn AccountDecoder>)> {
@@ -33,8 +31,8 @@ fn no_decoder_decodes_what_it_says_it_cannot() {
     // Lengths spanning every real account size in this workspace and the gaps
     // between them, so each decoder meets its neighbours' data.
     let lengths = [
-        0usize, 1, 8, 80, 81, 82, 83, 100, 164, 165, 166, 200, 354, 355, 356, 500, 751, 752,
-        753, 800, 866, 900, 2048,
+        0usize, 1, 8, 80, 81, 82, 83, 100, 164, 165, 166, 200, 354, 355, 356, 500, 751, 752, 753,
+        800, 866, 900, 2048,
     ];
 
     let mut violations = Vec::new();
@@ -45,7 +43,10 @@ fn no_decoder_decodes_what_it_says_it_cannot() {
             // discriminating positions.
             for (fill_name, data) in [
                 ("zeroes", vec![0u8; len]),
-                ("pattern", (0..len).map(|i| (i % 251) as u8).collect::<Vec<u8>>()),
+                (
+                    "pattern",
+                    (0..len).map(|i| (i % 251) as u8).collect::<Vec<u8>>(),
+                ),
             ] {
                 if !decoder.can_decode(&data) && decoder.decode_account(&data).is_ok() {
                     violations.push(format!(

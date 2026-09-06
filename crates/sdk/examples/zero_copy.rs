@@ -2,7 +2,7 @@
 //!
 //! Run with: `cargo run --example zero_copy`
 
-use account_decoder_sdk::{Discriminator, ZeroCopyError, ZeroCopyReader, read_discriminator};
+use account_decoder_sdk::{read_discriminator, Discriminator, ZeroCopyError, ZeroCopyReader};
 use solana_sdk::pubkey::Pubkey;
 
 /// Token account layout offsets
@@ -88,7 +88,7 @@ fn demo_zero_copy_reader() {
     println!("=== ZeroCopyReader Demo ===\n");
 
     // Create sample data
-    let data: [u8; 32] = [
+    let data: [u8; 28] = [
         0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // u64: 1
         0xFF, 0x00, 0x00, 0x00, // u32: 255
         0x05, 0x00, 0x00, 0x00, // string length: 5
@@ -100,14 +100,14 @@ fn demo_zero_copy_reader() {
 
     // Read primitives
     let value1 = reader.read_u64().unwrap();
-    println!("Read u64: {}", value1);
+    println!("Read u64: {value1}");
 
     let value2 = reader.read_u32().unwrap();
-    println!("Read u32: {}", value2);
+    println!("Read u32: {value2}");
 
     // Read string (borsh format: u32 length + bytes)
     let string = reader.read_str().unwrap();
-    println!("Read string: {}", string);
+    println!("Read string: {string}");
 
     println!("Position after reads: {}", reader.position());
     println!("Remaining bytes: {}", reader.remaining());
@@ -167,6 +167,42 @@ fn demo_token_parsing() {
     println!("  Amount: {}", view.amount);
     println!("  Has delegate: {}", view.has_delegate);
     println!("  State: {}", view.state);
+
+    // The fields are borrowed slices into the original buffer. Converting one
+    // to a Pubkey is the only place a copy happens, and only for the field the
+    // caller actually asked about -- which is the whole argument for the view.
+    println!("  Mint:  {}", view.mint_pubkey());
+    println!("  Owner: {}", view.owner_pubkey());
+    match view.delegate {
+        Some(delegate) => println!("  Delegate: {}", Pubkey::new_from_array(*delegate)),
+        None => println!("  Delegate: none"),
+    }
+
+    // The same fields again, reached by offset without a reader at all. This is
+    // what you do when one field out of a hundred is wanted: no parse, no
+    // allocation, just an indexed read.
+    let amount_bytes: [u8; 8] = data[token_offsets::AMOUNT..token_offsets::AMOUNT + 8]
+        .try_into()
+        .expect("eight bytes");
+    println!(
+        "  Amount read directly at offset {}: {}",
+        token_offsets::AMOUNT,
+        u64::from_le_bytes(amount_bytes)
+    );
+    println!(
+        "  State byte at offset {}: {}",
+        token_offsets::STATE,
+        data[token_offsets::STATE]
+    );
+    println!(
+        "  Mint occupies bytes {}..{}, owner {}..{}, delegate tag at {}",
+        token_offsets::MINT,
+        token_offsets::MINT + 32,
+        token_offsets::OWNER,
+        token_offsets::OWNER + 32,
+        token_offsets::DELEGATE_TAG
+    );
+    debug_assert_eq!(token_offsets::DELEGATE, token_offsets::DELEGATE_TAG + 4);
     println!("  Mint (first byte): 0x{:02x}", view.mint[0]);
     println!("  Owner (first byte): 0x{:02x}", view.owner[0]);
     println!();

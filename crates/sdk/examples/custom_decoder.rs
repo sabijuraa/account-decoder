@@ -68,6 +68,9 @@ impl DecodedEvent for ConfigAccount {
         "my-counter-program"
     }
 
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 // ----------------- Decoder Implementation -----------------
@@ -89,18 +92,14 @@ impl CounterProgramDecoder {
 
         let mut reader = ZeroCopyReader::new(&data[8..]); // Skip discriminator
 
-        let count = reader
-            .read_u64()
-            .map_err(|e| DecodeError::deserialization(e))?;
+        let count = reader.read_u64().map_err(DecodeError::deserialization)?;
 
         let authority_bytes = reader
             .read_fixed::<32>()
-            .map_err(|e| DecodeError::deserialization(e))?;
+            .map_err(DecodeError::deserialization)?;
         let authority = Pubkey::new_from_array(*authority_bytes);
 
-        let bump = reader
-            .read_u8()
-            .map_err(|e| DecodeError::deserialization(e))?;
+        let bump = reader.read_u8().map_err(DecodeError::deserialization)?;
 
         Ok(CounterAccount {
             count,
@@ -119,16 +118,12 @@ impl CounterProgramDecoder {
 
         let admin_bytes = reader
             .read_fixed::<32>()
-            .map_err(|e| DecodeError::deserialization(e))?;
+            .map_err(DecodeError::deserialization)?;
         let admin = Pubkey::new_from_array(*admin_bytes);
 
-        let max_count = reader
-            .read_u64()
-            .map_err(|e| DecodeError::deserialization(e))?;
+        let max_count = reader.read_u64().map_err(DecodeError::deserialization)?;
 
-        let paused = reader
-            .read_bool()
-            .map_err(|e| DecodeError::deserialization(e))?;
+        let paused = reader.read_bool().map_err(DecodeError::deserialization)?;
 
         Ok(ConfigAccount {
             admin,
@@ -217,7 +212,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Err(e) => {
-            eprintln!("  Failed: {}", e);
+            eprintln!("  Failed: {e}");
         }
     }
     println!();
@@ -242,7 +237,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Err(e) => {
-            eprintln!("  Failed: {}", e);
+            eprintln!("  Failed: {e}");
         }
     }
 

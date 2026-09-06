@@ -151,7 +151,13 @@ mod tests {
     #[test]
     fn test_error_creation() {
         let err = DecodeError::insufficient_data(32, 16);
-        assert!(matches!(err, DecodeError::InsufficientData { expected: 32, actual: 16 }));
+        assert!(matches!(
+            err,
+            DecodeError::InsufficientData {
+                expected: 32,
+                actual: 16
+            }
+        ));
 
         let err = DecodeError::unknown_discriminator(&[1, 2, 3]);
         assert!(matches!(err, DecodeError::UnknownDiscriminator(ref v) if v == &[1, 2, 3]));

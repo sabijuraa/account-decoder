@@ -97,7 +97,9 @@ pub mod solana {
 
 /// Prelude module for convenient imports.
 pub mod prelude {
-    pub use crate::decoder::{AccountDecoder, DecoderIdentity, DecoderMetadata, InstructionDecoder};
+    pub use crate::decoder::{
+        AccountDecoder, DecoderIdentity, DecoderMetadata, InstructionDecoder,
+    };
     pub use crate::error::{DecodeError, DecodeResult};
     pub use crate::event::{DecodedEvent, EventKind, TypedEvent};
     pub use crate::registry::DecoderRegistry;

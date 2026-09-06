@@ -319,7 +319,10 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(ZeroCopyError::UnexpectedEof { needed: 8, remaining: 3 })
+            Err(ZeroCopyError::UnexpectedEof {
+                needed: 8,
+                remaining: 3
+            })
         ));
     }
 

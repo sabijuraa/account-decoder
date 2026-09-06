@@ -102,30 +102,29 @@
 
 // Re-export core types
 pub use account_decoder_core::{
-    AccountDecoder, ContextualEvent, DecodeError, DecodeResult, DecodedEvent,
-    DecoderCapabilities, DecoderIdentity, DecoderInfo, DecoderMetadata, DecoderRegistry,
-    EventKind, InstructionDecoder, PartialEvent, ProgramDecoder, RegistryBuilder,
-    TypedEvent,
+    AccountDecoder, ContextualEvent, DecodeError, DecodeResult, DecodedEvent, DecoderCapabilities,
+    DecoderIdentity, DecoderInfo, DecoderMetadata, DecoderRegistry, EventKind, InstructionDecoder,
+    PartialEvent, ProgramDecoder, RegistryBuilder, TypedEvent,
 };
 
 // Re-export borsh utilities
 pub use account_decoder_borsh_util::{
-    read_discriminator, AnchorDiscriminator, BorshSlice, Discriminator, SliceReader,
-    ZeroCopyError, ZeroCopyReader,
+    read_discriminator, AnchorDiscriminator, BorshSlice, Discriminator, SliceReader, ZeroCopyError,
+    ZeroCopyReader,
 };
 
 // Re-export built-in decoders (when feature enabled)
 #[cfg(feature = "builtin-decoders")]
 pub use account_decoder_decoders::{
-    program_ids, AmmFees, AmmInfo, Mint, Multisig, NonceAccount, RaydiumAmmDecoder,
-    SystemAccount, SystemDecoder, Token2022Decoder, TokenAccount, TokenDecoder,
+    program_ids, AmmFees, AmmInfo, Mint, Multisig, NonceAccount, RaydiumAmmDecoder, SystemAccount,
+    SystemDecoder, Token2022Decoder, TokenAccount, TokenDecoder,
 };
 
 // Re-export anchor codegen (when feature enabled)
 #[cfg(feature = "anchor-codegen")]
 pub use account_decoder_anchor_gen::{
-    CodeGenerator, GeneratorConfig, GeneratorError, IdlAccount, IdlField,
-    IdlInstruction, IdlParser, IdlProgram, IdlType, RustType, TypeMapper,
+    CodeGenerator, GeneratorConfig, GeneratorError, IdlAccount, IdlField, IdlInstruction,
+    IdlParser, IdlProgram, IdlType, RustType, TypeMapper,
 };
 
 // Re-export solana types
@@ -155,16 +154,15 @@ pub mod prelude {
     };
 
     pub use crate::{
-        read_discriminator, AnchorDiscriminator, BorshSlice, Discriminator,
-        ZeroCopyReader,
+        read_discriminator, AnchorDiscriminator, BorshSlice, Discriminator, ZeroCopyReader,
     };
 
     pub use solana_sdk::pubkey::Pubkey;
 
     #[cfg(feature = "builtin-decoders")]
     pub use crate::{
-        program_ids::*, Mint, NonceAccount, SystemAccount, SystemDecoder,
-        Token2022Decoder, TokenAccount, TokenDecoder,
+        program_ids::*, Mint, NonceAccount, SystemAccount, SystemDecoder, Token2022Decoder,
+        TokenAccount, TokenDecoder,
     };
 
     #[cfg(feature = "builtin-decoders")]

@@ -4,7 +4,8 @@
 
 use account_decoder_borsh_util::ZeroCopyReader;
 use account_decoder_core::{
-    AccountDecoder, DecodeError, DecodeResult, DecodedEvent, DecoderCapabilities, DecoderIdentity, DecoderMetadata, EventKind, InstructionDecoder,
+    AccountDecoder, DecodeError, DecodeResult, DecodedEvent, DecoderCapabilities, DecoderIdentity,
+    DecoderMetadata, EventKind, InstructionDecoder,
 };
 use solana_sdk::pubkey::Pubkey;
 use std::any::Any;
@@ -114,7 +115,10 @@ impl SystemDecoder {
     /// Decode a nonce account.
     fn decode_nonce(data: &[u8]) -> DecodeResult<NonceAccount> {
         if data.len() < NONCE_ACCOUNT_SIZE {
-            return Err(DecodeError::insufficient_data(NONCE_ACCOUNT_SIZE, data.len()));
+            return Err(DecodeError::insufficient_data(
+                NONCE_ACCOUNT_SIZE,
+                data.len(),
+            ));
         }
 
         let mut reader = ZeroCopyReader::new(data);
@@ -128,17 +132,21 @@ impl SystemDecoder {
 
         // Authority
         let authority = Pubkey::new_from_array(
-            *reader.read_fixed::<32>().map_err(DecodeError::deserialization)?
+            *reader
+                .read_fixed::<32>()
+                .map_err(DecodeError::deserialization)?,
         );
 
         // Nonce (blockhash)
         let nonce = Pubkey::new_from_array(
-            *reader.read_fixed::<32>().map_err(DecodeError::deserialization)?
+            *reader
+                .read_fixed::<32>()
+                .map_err(DecodeError::deserialization)?,
         );
 
         // Fee calculator
-        let fee_calculator_lamports_per_signature = reader.read_u64()
-            .map_err(DecodeError::deserialization)?;
+        let fee_calculator_lamports_per_signature =
+            reader.read_u64().map_err(DecodeError::deserialization)?;
 
         Ok(NonceAccount {
             version,
@@ -174,7 +182,6 @@ impl DecoderIdentity for SystemDecoder {
 }
 
 impl AccountDecoder for SystemDecoder {
-
     fn decode_account(&self, data: &[u8]) -> DecodeResult<Box<dyn DecodedEvent>> {
         // A nonce account is the only System-owned account with a layout.
         if data.len() == NONCE_ACCOUNT_SIZE {
@@ -206,7 +213,6 @@ impl AccountDecoder for SystemDecoder {
     fn can_decode(&self, data: &[u8]) -> bool {
         data.is_empty() || data.len() == NONCE_ACCOUNT_SIZE
     }
-
 }
 
 /// System program instruction types.
@@ -296,7 +302,6 @@ impl DecodedEvent for SystemInstruction {
 }
 
 impl InstructionDecoder for SystemDecoder {
-
     fn decode_instruction(&self, data: &[u8]) -> DecodeResult<Box<dyn DecodedEvent>> {
         /// Read the next 32 bytes as a pubkey.
         fn read_pubkey(reader: &mut ZeroCopyReader<'_>) -> DecodeResult<Pubkey> {
@@ -320,7 +325,9 @@ impl InstructionDecoder for SystemDecoder {
                 let lamports = reader.read_u64().map_err(DecodeError::deserialization)?;
                 let space = reader.read_u64().map_err(DecodeError::deserialization)?;
                 let owner = Pubkey::new_from_array(
-                    *reader.read_fixed::<32>().map_err(DecodeError::deserialization)?
+                    *reader
+                        .read_fixed::<32>()
+                        .map_err(DecodeError::deserialization)?,
                 );
                 SystemInstruction::CreateAccount {
                     lamports,
@@ -331,7 +338,9 @@ impl InstructionDecoder for SystemDecoder {
             1 => {
                 // Assign
                 let owner = Pubkey::new_from_array(
-                    *reader.read_fixed::<32>().map_err(DecodeError::deserialization)?
+                    *reader
+                        .read_fixed::<32>()
+                        .map_err(DecodeError::deserialization)?,
                 );
                 SystemInstruction::Assign { owner }
             }
@@ -365,13 +374,17 @@ impl InstructionDecoder for SystemDecoder {
             }
             6 => {
                 let authority = Pubkey::new_from_array(
-                    *reader.read_fixed::<32>().map_err(DecodeError::deserialization)?
+                    *reader
+                        .read_fixed::<32>()
+                        .map_err(DecodeError::deserialization)?,
                 );
                 SystemInstruction::InitializeNonceAccount { authority }
             }
             7 => {
                 let authority = Pubkey::new_from_array(
-                    *reader.read_fixed::<32>().map_err(DecodeError::deserialization)?
+                    *reader
+                        .read_fixed::<32>()
+                        .map_err(DecodeError::deserialization)?,
                 );
                 SystemInstruction::AuthorizeNonceAccount { authority }
             }
@@ -410,12 +423,15 @@ impl InstructionDecoder for SystemDecoder {
                 }
             }
             12 => SystemInstruction::UpgradeNonceAccount,
-            _ => return Err(DecodeError::unknown_discriminator(&discriminator.to_le_bytes())),
+            _ => {
+                return Err(DecodeError::unknown_discriminator(
+                    &discriminator.to_le_bytes(),
+                ))
+            }
         };
 
         Ok(Box::new(instruction))
     }
-
 }
 
 #[cfg(test)]
@@ -518,7 +534,10 @@ mod tests {
         fields.extend_from_slice(b"short");
 
         let result = decoder.decode_instruction(&encode(3, &fields));
-        assert!(result.is_err(), "an impossible seed length must be rejected");
+        assert!(
+            result.is_err(),
+            "an impossible seed length must be rejected"
+        );
     }
     use account_decoder_core::TypedEvent;
 
@@ -564,7 +583,9 @@ mod tests {
         let instr = event.downcast_ref::<SystemInstruction>().unwrap();
         assert!(matches!(
             instr,
-            SystemInstruction::Transfer { lamports: 1_000_000 }
+            SystemInstruction::Transfer {
+                lamports: 1_000_000
+            }
         ));
     }
 }

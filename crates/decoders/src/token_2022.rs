@@ -4,13 +4,14 @@
 //! like transfer hooks, confidential transfers, and metadata.
 
 use account_decoder_core::{
-    AccountDecoder, DecodeError, DecodeResult, DecodedEvent, DecoderCapabilities, DecoderIdentity, DecoderMetadata, EventKind,
+    AccountDecoder, DecodeError, DecodeResult, DecodedEvent, DecoderCapabilities, DecoderIdentity,
+    DecoderMetadata, EventKind,
 };
 use solana_sdk::pubkey::Pubkey;
 use std::any::Any;
 
 use crate::program_ids::TOKEN_2022_PROGRAM_ID;
-use crate::token::{TokenAccount, Mint, AccountState};
+use crate::token::{AccountState, Mint, TokenAccount};
 
 /// Token-2022 extensions that can be attached to accounts.
 #[derive(Debug, Clone, PartialEq)]
@@ -36,9 +37,7 @@ pub enum Token2022Extension {
     /// Confidential transfer account state.
     ConfidentialTransferAccount,
     /// Default account state for new accounts.
-    DefaultAccountState {
-        state: AccountState,
-    },
+    DefaultAccountState { state: AccountState },
     /// Immutable owner (cannot change owner after init).
     ImmutableOwner,
     /// Memo required on transfers.
@@ -56,13 +55,9 @@ pub enum Token2022Extension {
         current_rate: i16,
     },
     /// CPI guard (prevent certain CPI).
-    CpiGuard {
-        lock_cpi: bool,
-    },
+    CpiGuard { lock_cpi: bool },
     /// Permanent delegate.
-    PermanentDelegate {
-        delegate: Option<Pubkey>,
-    },
+    PermanentDelegate { delegate: Option<Pubkey> },
     /// Transfer hook configuration.
     TransferHook {
         authority: Option<Pubkey>,
@@ -82,10 +77,7 @@ pub enum Token2022Extension {
         uri: String,
     },
     /// Unknown extension type.
-    Unknown {
-        extension_type: u16,
-        data: Vec<u8>,
-    },
+    Unknown { extension_type: u16, data: Vec<u8> },
 }
 
 /// A Token-2022 mint with extensions.
@@ -198,8 +190,7 @@ impl Token2022Decoder {
                 return false;
             }
 
-            let ext_len =
-                u16::from_le_bytes([data[offset + 2], data[offset + 3]]) as usize;
+            let ext_len = u16::from_le_bytes([data[offset + 2], data[offset + 3]]) as usize;
             offset += 4;
 
             if offset + ext_len > data.len() {
@@ -269,6 +260,46 @@ impl Token2022Decoder {
                 extension_type: ext_type,
                 data: data.to_vec(),
             }
+        }
+
+        /// Read a borsh string: a u32 length then that many bytes.
+        ///
+        /// The length is attacker-controlled, so a claim longer than the buffer
+        /// ends the parse rather than allocating on it.
+        fn read_string(data: &[u8], cursor: &mut usize) -> Option<String> {
+            let len = read_u32(data, *cursor)? as usize;
+            *cursor += 4;
+            let bytes = data.get(*cursor..*cursor + len)?;
+            *cursor += len;
+            String::from_utf8(bytes.to_vec()).ok()
+        }
+
+        fn read_u32(data: &[u8], offset: usize) -> Option<u32> {
+            data.get(offset..offset + 4)
+                .and_then(|b| b.try_into().ok())
+                .map(u32::from_le_bytes)
+        }
+
+        /// TokenMetadata: update authority, mint, then three strings.
+        fn parse_token_metadata(data: &[u8]) -> Option<Token2022Extension> {
+            let update_authority = {
+                let bytes: [u8; 32] = data.get(0..32)?.try_into().ok()?;
+                (bytes != [0u8; 32]).then(|| Pubkey::new_from_array(bytes))
+            };
+            let mint = Pubkey::new_from_array(data.get(32..64)?.try_into().ok()?);
+
+            let mut cursor = 64;
+            let name = read_string(data, &mut cursor)?;
+            let symbol = read_string(data, &mut cursor)?;
+            let uri = read_string(data, &mut cursor)?;
+
+            Some(Token2022Extension::TokenMetadata {
+                update_authority,
+                mint,
+                name,
+                symbol,
+                uri,
+            })
         }
 
         match ext_type {
@@ -355,10 +386,11 @@ impl Token2022Decoder {
             // A non-transferable *account* marker carries no payload; the mint
             // side is NON_TRANSFERABLE above.
             extension_type::NON_TRANSFERABLE_ACCOUNT => Token2022Extension::NonTransferable,
-            extension_type::TRANSFER_HOOK_ACCOUNT | extension_type::TOKEN_METADATA => {
-                // TransferHookAccount is a single "transferring" flag with no
-                // variant, and TokenMetadata is a variable-length TLV whose
-                // layout is worth doing properly rather than approximately.
+            extension_type::TOKEN_METADATA => {
+                parse_token_metadata(data).unwrap_or_else(|| unknown(ext_type, data))
+            }
+            extension_type::TRANSFER_HOOK_ACCOUNT => {
+                // A single "transferring" flag, with no variant to carry it.
                 unknown(ext_type, data)
             }
             extension_type::IMMUTABLE_OWNER => Token2022Extension::ImmutableOwner,
@@ -415,7 +447,6 @@ impl DecoderIdentity for Token2022Decoder {
 }
 
 impl AccountDecoder for Token2022Decoder {
-
     fn decode_account(&self, data: &[u8]) -> DecodeResult<Box<dyn DecodedEvent>> {
         // Token-2022 accounts are at least 165 bytes (token account size)
         // with optional extensions after
@@ -520,7 +551,6 @@ impl AccountDecoder for Token2022Decoder {
     fn can_decode(&self, data: &[u8]) -> bool {
         data.len() >= 82
     }
-
 }
 
 #[cfg(test)]
@@ -572,7 +602,7 @@ mod tests {
         let mut payload = authority.to_bytes().to_vec();
         payload.extend_from_slice(&withdrawer.to_bytes());
         payload.extend_from_slice(&0u64.to_le_bytes()); // withheld
-        // older: epoch 10, max 1_000, 50 bps
+                                                        // older: epoch 10, max 1_000, 50 bps
         payload.extend_from_slice(&10u64.to_le_bytes());
         payload.extend_from_slice(&1_000u64.to_le_bytes());
         payload.extend_from_slice(&50u16.to_le_bytes());
@@ -599,7 +629,10 @@ mod tests {
         // option. Reporting Pubkey::default() would name a real address nobody
         // controls as the permanent delegate.
         let parsed = Token2022Decoder::parse_extension(12, &[0u8; 32]);
-        assert_eq!(parsed, Token2022Extension::PermanentDelegate { delegate: None });
+        assert_eq!(
+            parsed,
+            Token2022Extension::PermanentDelegate { delegate: None }
+        );
 
         let delegate = Pubkey::new_from_array([9u8; 32]);
         let parsed = Token2022Decoder::parse_extension(12, &delegate.to_bytes());
@@ -608,6 +641,50 @@ mod tests {
             Token2022Extension::PermanentDelegate {
                 delegate: Some(delegate)
             }
+        );
+    }
+
+    #[test]
+    fn token_metadata_is_read_including_its_strings() {
+        let authority = Pubkey::new_from_array([1u8; 32]);
+        let mint = Pubkey::new_from_array([2u8; 32]);
+
+        let mut payload = authority.to_bytes().to_vec();
+        payload.extend_from_slice(&mint.to_bytes());
+        for value in ["PayPal USD", "PYUSD", "https://example.invalid/pyusd.json"] {
+            payload.extend_from_slice(&(value.len() as u32).to_le_bytes());
+            payload.extend_from_slice(value.as_bytes());
+        }
+
+        assert_eq!(
+            Token2022Decoder::parse_extension(19, &payload),
+            Token2022Extension::TokenMetadata {
+                update_authority: Some(authority),
+                mint,
+                name: "PayPal USD".to_string(),
+                symbol: "PYUSD".to_string(),
+                uri: "https://example.invalid/pyusd.json".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn a_metadata_string_longer_than_its_buffer_is_refused() {
+        // The length prefix comes off chain. Claiming four gigabytes of name in
+        // a hundred-byte extension must fall back rather than allocate.
+        let mut payload = [0u8; 64].to_vec();
+        payload.extend_from_slice(&u32::MAX.to_le_bytes());
+        payload.extend_from_slice(b"short");
+
+        assert!(
+            matches!(
+                Token2022Decoder::parse_extension(19, &payload),
+                Token2022Extension::Unknown {
+                    extension_type: 19,
+                    ..
+                }
+            ),
+            "an impossible string length keeps the raw bytes instead"
         );
     }
 
@@ -633,7 +710,13 @@ mod tests {
         // zeroes in the missing half.
         let parsed = Token2022Decoder::parse_extension(1, &[7u8; 40]);
         assert!(
-            matches!(parsed, Token2022Extension::Unknown { extension_type: 1, .. }),
+            matches!(
+                parsed,
+                Token2022Extension::Unknown {
+                    extension_type: 1,
+                    ..
+                }
+            ),
             "a short payload should keep its bytes rather than decode partially"
         );
     }

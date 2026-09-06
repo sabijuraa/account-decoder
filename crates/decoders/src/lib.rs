@@ -35,14 +35,14 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
+pub mod raydium_amm;
 mod system;
 mod token;
-pub mod raydium_amm;
 mod token_2022;
 
-pub use system::{SystemDecoder, SystemAccount, NonceAccount};
-pub use token::{TokenDecoder, TokenAccount, Mint, Multisig};
 pub use raydium_amm::{AmmFees, AmmInfo, RaydiumAmmDecoder, RAYDIUM_AMM_V4_PROGRAM_ID};
+pub use system::{NonceAccount, SystemAccount, SystemDecoder};
+pub use token::{Mint, Multisig, TokenAccount, TokenDecoder};
 pub use token_2022::Token2022Decoder;
 
 /// Program IDs for built-in decoders.
@@ -50,10 +50,12 @@ pub mod program_ids {
     use solana_sdk::pubkey::Pubkey;
 
     /// SPL Token program ID.
-    pub const TOKEN_PROGRAM_ID: Pubkey = solana_sdk::pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+    pub const TOKEN_PROGRAM_ID: Pubkey =
+        solana_sdk::pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 
     /// SPL Token-2022 program ID.
-    pub const TOKEN_2022_PROGRAM_ID: Pubkey = solana_sdk::pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
+    pub const TOKEN_2022_PROGRAM_ID: Pubkey =
+        solana_sdk::pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 
     /// System program ID.
     pub const SYSTEM_PROGRAM_ID: Pubkey = solana_sdk::pubkey!("11111111111111111111111111111111");
@@ -61,7 +63,7 @@ pub mod program_ids {
 
 /// Re-export core types for convenience.
 pub mod prelude {
-    pub use crate::system::{SystemDecoder, SystemAccount};
-    pub use crate::token::{TokenDecoder, TokenAccount, Mint};
     pub use crate::program_ids::*;
+    pub use crate::system::{SystemAccount, SystemDecoder};
+    pub use crate::token::{Mint, TokenAccount, TokenDecoder};
 }

@@ -50,7 +50,7 @@ mod slice;
 pub use discriminator::{
     read_discriminator, AnchorDiscriminator, Discriminator, DiscriminatorTable,
 };
-pub use reader::{ZeroCopyReader, ZeroCopyError};
+pub use reader::{ZeroCopyError, ZeroCopyReader};
 pub use slice::{BorshSlice, SliceReader};
 
 /// Re-export borsh for convenience.

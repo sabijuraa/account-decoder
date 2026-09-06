@@ -127,8 +127,14 @@ fn print_event(event: &dyn account_decoder_core::DecodedEvent, raw: bool) {
         println!("  owner   : {}", account.owner);
         println!("  amount  : {}", account.amount);
     } else if let Some(pool) = event.downcast_ref::<AmmInfo>() {
-        println!("  base    : {} ({} decimals)", pool.coin_mint, pool.coin_decimals);
-        println!("  quote   : {} ({} decimals)", pool.pc_mint, pool.pc_decimals);
+        println!(
+            "  base    : {} ({} decimals)",
+            pool.coin_mint, pool.coin_decimals
+        );
+        println!(
+            "  quote   : {} ({} decimals)",
+            pool.pc_mint, pool.pc_decimals
+        );
         println!("  lp mint : {}", pool.lp_mint);
         println!("  market  : {}", pool.market);
         println!("  trade fee: {:?}", pool.fees.trade_fee_rate());
@@ -152,8 +158,8 @@ fn load_data(args: &DecodeArgs) -> Result<Vec<u8>> {
 
 /// Read from a file, accepting either a `getAccountInfo` response or raw base64.
 fn load_file(path: &Path) -> Result<Vec<u8>> {
-    let text = std::fs::read_to_string(path)
-        .with_context(|| format!("reading {}", path.display()))?;
+    let text =
+        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
 
     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
         if let Some(encoded) = account_data_from_json(&json) {

@@ -57,7 +57,10 @@ fn bench_accounts(c: &mut Criterion) {
     let decoder = TokenDecoder::new();
     let mut group = c.benchmark_group("account");
 
-    for (name, data) in [("mint", mint_bytes()), ("token_account", token_account_bytes())] {
+    for (name, data) in [
+        ("mint", mint_bytes()),
+        ("token_account", token_account_bytes()),
+    ] {
         group.throughput(Throughput::Bytes(data.len() as u64));
         group.bench_with_input(BenchmarkId::from_parameter(name), &data, |b, data| {
             b.iter(|| black_box(decoder.decode_account(black_box(data))).map(|_| ()))

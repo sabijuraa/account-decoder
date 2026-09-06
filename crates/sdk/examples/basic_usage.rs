@@ -53,7 +53,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Err(e) => {
-            eprintln!("  Failed to decode: {}", e);
+            eprintln!("  Failed to decode: {e}");
         }
     }
     println!();
@@ -86,7 +86,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Err(e) => {
-            eprintln!("  Failed to decode: {}", e);
+            eprintln!("  Failed to decode: {e}");
         }
     }
     println!();
@@ -104,7 +104,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("  Full name: {}", event.full_name());
         }
         Err(e) => {
-            eprintln!("  Failed to decode: {}", e);
+            eprintln!("  Failed to decode: {e}");
         }
     }
     println!();
@@ -117,7 +117,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match result {
         Some(Ok(event)) => println!("  Decoded: {}", event.event_type()),
-        Some(Err(e)) => println!("  Decode error: {}", e),
+        Some(Err(e)) => println!("  Decode error: {e}"),
         None => println!("  No decoder registered for this program"),
     }
 

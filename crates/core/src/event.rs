@@ -239,7 +239,11 @@ mod tests {
             signature: Some("5xy".to_string()),
         };
 
-        assert_eq!(wrapped.event_type(), "Simple", "the inner type shows through");
+        assert_eq!(
+            wrapped.event_type(),
+            "Simple",
+            "the inner type shows through"
+        );
         assert_eq!(wrapped.event_kind(), EventKind::Account);
         assert_eq!(wrapped.program_name(), "test");
         assert_eq!(wrapped.slot, Some(250_000_000));

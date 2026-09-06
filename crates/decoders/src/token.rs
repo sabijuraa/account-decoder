@@ -4,7 +4,8 @@
 
 use account_decoder_borsh_util::ZeroCopyReader;
 use account_decoder_core::{
-    AccountDecoder, DecodeError, DecodeResult, DecodedEvent, DecoderCapabilities, DecoderIdentity, DecoderMetadata, EventKind, InstructionDecoder,
+    AccountDecoder, DecodeError, DecodeResult, DecodedEvent, DecoderCapabilities, DecoderIdentity,
+    DecoderMetadata, EventKind, InstructionDecoder,
 };
 use solana_sdk::pubkey::Pubkey;
 use std::any::Any;
@@ -203,18 +204,27 @@ impl TokenDecoder {
     /// Decode a token account.
     pub fn decode_token_account(data: &[u8]) -> DecodeResult<TokenAccount> {
         if data.len() < TOKEN_ACCOUNT_SIZE {
-            return Err(DecodeError::insufficient_data(TOKEN_ACCOUNT_SIZE, data.len()));
+            return Err(DecodeError::insufficient_data(
+                TOKEN_ACCOUNT_SIZE,
+                data.len(),
+            ));
         }
 
         let mut reader = ZeroCopyReader::new(data);
 
         // mint: Pubkey (32 bytes)
-        let mint = Pubkey::new_from_array(*reader.read_fixed::<32>()
-            .map_err(DecodeError::deserialization)?);
+        let mint = Pubkey::new_from_array(
+            *reader
+                .read_fixed::<32>()
+                .map_err(DecodeError::deserialization)?,
+        );
 
         // owner: Pubkey (32 bytes)
-        let owner = Pubkey::new_from_array(*reader.read_fixed::<32>()
-            .map_err(DecodeError::deserialization)?);
+        let owner = Pubkey::new_from_array(
+            *reader
+                .read_fixed::<32>()
+                .map_err(DecodeError::deserialization)?,
+        );
 
         // amount: u64
         let amount = reader.read_u64().map_err(DecodeError::deserialization)?;
@@ -262,7 +272,8 @@ impl TokenDecoder {
         // Read up to 11 signers
         let mut signers = Vec::with_capacity(n as usize);
         for _ in 0..11 {
-            let pubkey_bytes = reader.read_fixed::<32>()
+            let pubkey_bytes = reader
+                .read_fixed::<32>()
                 .map_err(DecodeError::deserialization)?;
             let pubkey = Pubkey::new_from_array(*pubkey_bytes);
             if pubkey != Pubkey::default() {
@@ -281,7 +292,8 @@ impl TokenDecoder {
     /// Read a COption<Pubkey> (Solana's Option representation).
     fn read_coption_pubkey(reader: &mut ZeroCopyReader) -> DecodeResult<Option<Pubkey>> {
         let tag = reader.read_u32().map_err(DecodeError::deserialization)?;
-        let pubkey_bytes = reader.read_fixed::<32>()
+        let pubkey_bytes = reader
+            .read_fixed::<32>()
             .map_err(DecodeError::deserialization)?;
 
         Ok(if tag == 0 {
@@ -324,7 +336,6 @@ impl DecoderIdentity for TokenDecoder {
 }
 
 impl AccountDecoder for TokenDecoder {
-
     fn decode_account(&self, data: &[u8]) -> DecodeResult<Box<dyn DecodedEvent>> {
         // Determine account type by size
         // Exact sizes only. SPL Token accounts are fixed-size structs, so
@@ -346,7 +357,6 @@ impl AccountDecoder for TokenDecoder {
     fn can_decode(&self, data: &[u8]) -> bool {
         matches!(data.len(), MINT_SIZE | TOKEN_ACCOUNT_SIZE | MULTISIG_SIZE)
     }
-
 }
 
 /// Token instruction types.
@@ -432,7 +442,6 @@ impl DecodedEvent for TokenInstruction {
 }
 
 impl InstructionDecoder for TokenDecoder {
-
     fn decode_instruction(&self, data: &[u8]) -> DecodeResult<Box<dyn DecodedEvent>> {
         if data.is_empty() {
             return Err(DecodeError::insufficient_data(1, 0));
@@ -446,7 +455,9 @@ impl InstructionDecoder for TokenDecoder {
                 // InitializeMint
                 let decimals = reader.read_u8().map_err(DecodeError::deserialization)?;
                 let mint_authority = Pubkey::new_from_array(
-                    *reader.read_fixed::<32>().map_err(DecodeError::deserialization)?
+                    *reader
+                        .read_fixed::<32>()
+                        .map_err(DecodeError::deserialization)?,
                 );
                 let freeze_authority = Self::read_coption_pubkey(&mut reader)?;
 
@@ -515,7 +526,6 @@ impl InstructionDecoder for TokenDecoder {
 
         Ok(Box::new(instruction))
     }
-
 }
 
 #[cfg(test)]

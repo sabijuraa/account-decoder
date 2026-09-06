@@ -239,7 +239,10 @@ mod tests {
     #[test]
     fn a_discriminator_table_routes_to_the_right_value() {
         let mut table: DiscriminatorTable<8, &str> = DiscriminatorTable::new();
-        table.insert(Discriminator::new(*AnchorDiscriminator::account("State").as_bytes()), "State");
+        table.insert(
+            Discriminator::new(*AnchorDiscriminator::account("State").as_bytes()),
+            "State",
+        );
         table.insert(
             Discriminator::new(*AnchorDiscriminator::account("TicketAccountData").as_bytes()),
             "TicketAccountData",
@@ -254,7 +257,11 @@ mod tests {
         assert_eq!(table.len(), 2);
         assert!(!table.is_empty());
 
-        assert_eq!(table.get(&[0u8; 8]), None, "an unknown discriminator matches nothing");
+        assert_eq!(
+            table.get(&[0u8; 8]),
+            None,
+            "an unknown discriminator matches nothing"
+        );
         assert_eq!(table.get(&[0u8; 3]), None, "and short data cannot match");
     }
 
@@ -279,7 +286,10 @@ mod tests {
         let result = read_discriminator::<8>(&data);
         assert!(matches!(
             result,
-            Err(DiscriminatorError::InsufficientData { expected: 8, actual: 3 })
+            Err(DiscriminatorError::InsufficientData {
+                expected: 8,
+                actual: 3
+            })
         ));
     }
 

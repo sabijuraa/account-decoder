@@ -8,9 +8,7 @@
 //! rather than quietly decode into plausible-looking nonsense.
 
 use account_decoder_core::{AccountDecoder, TypedEvent};
-use account_decoder_decoders::{
-    AmmInfo, Mint, RaydiumAmmDecoder, Token2022Decoder, TokenDecoder,
-};
+use account_decoder_decoders::{AmmInfo, Mint, RaydiumAmmDecoder, Token2022Decoder, TokenDecoder};
 use base64::Engine;
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
@@ -58,10 +56,7 @@ fn the_usdc_mint_decodes_to_its_real_parameters() {
         mint.mint_authority.is_some(),
         "USDC is mintable by Circle, so the authority is set"
     );
-    assert!(
-        mint.freeze_authority.is_some(),
-        "and USDC is freezable"
-    );
+    assert!(mint.freeze_authority.is_some(), "and USDC is freezable");
 }
 
 #[test]
@@ -94,7 +89,10 @@ fn a_token_2022_mint_with_extensions_decodes() {
     // The plain SPL Token decoder must not silently accept it as a token
     // account just because the length is above 165.
     let as_plain_token = TokenDecoder::new().decode_account(&data);
-    println!("  plain SPL Token decoder on the same bytes: {:?}", as_plain_token.is_err());
+    println!(
+        "  plain SPL Token decoder on the same bytes: {:?}",
+        as_plain_token.is_err()
+    );
 }
 
 #[test]
@@ -112,13 +110,20 @@ fn the_raydium_sol_usdc_pool_decodes_to_its_real_configuration() {
     let pool = event.downcast_ref::<AmmInfo>().expect("an AmmInfo");
 
     println!("Raydium SOL/USDC pool from mainnet:");
-    println!("  status         = {} (trading = {})", pool.status, pool.is_trading());
+    println!(
+        "  status         = {} (trading = {})",
+        pool.status,
+        pool.is_trading()
+    );
     println!("  coin_mint      = {}", pool.coin_mint);
     println!("  pc_mint        = {}", pool.pc_mint);
     println!("  lp_mint        = {}", pool.lp_mint);
     println!("  market         = {}", pool.market);
     println!("  market_program = {}", pool.market_program);
-    println!("  decimals       = {} / {}", pool.coin_decimals, pool.pc_decimals);
+    println!(
+        "  decimals       = {} / {}",
+        pool.coin_decimals, pool.pc_decimals
+    );
     println!("  trade fee      = {:?}", pool.fees.trade_fee_rate());
     println!("  swap fee       = {:?}", pool.fees.swap_fee_rate());
 
@@ -148,7 +153,10 @@ fn the_raydium_sol_usdc_pool_decodes_to_its_real_configuration() {
     assert_eq!(pool.fees.trade_fee_rate(), Some(0.0025));
     assert_eq!(pool.fees.swap_fee_rate(), Some(0.0025));
 
-    assert!(pool.is_trading(), "the pool is in its ordinary trading state");
+    assert!(
+        pool.is_trading(),
+        "the pool is in its ordinary trading state"
+    );
     assert_ne!(pool.coin_vault, Pubkey::default());
     assert_ne!(pool.pc_vault, Pubkey::default());
 }

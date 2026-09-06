@@ -337,25 +337,6 @@ mod tests {
         assert_eq!(takes_a_program_decoder(&decoder), decoder.program_id());
     }
 
-    #[derive(Debug)]
-    struct MockDecoder;
-
-    impl DecoderIdentity for MockDecoder {
-        fn metadata(&self) -> DecoderMetadata {
-            DecoderMetadata::new("Mock", Pubkey::default())
-        }
-
-        fn as_any(&self) -> &dyn Any {
-            self
-        }
-    }
-
-    impl AccountDecoder for MockDecoder {
-        fn decode_account(&self, _data: &[u8]) -> DecodeResult<Box<dyn DecodedEvent>> {
-            Err(crate::error::DecodeError::insufficient_data(1, 0))
-        }
-    }
-
     #[test]
     fn test_metadata_creation() {
         let meta = DecoderMetadata::new("Test", Pubkey::default());
