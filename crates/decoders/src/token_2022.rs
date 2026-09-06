@@ -3,7 +3,6 @@
 //! Token-2022 extends the original Token program with additional features
 //! like transfer hooks, confidential transfers, and metadata.
 
-use account_decoder_borsh_util::ZeroCopyReader;
 use account_decoder_core::{
     AccountDecoder, DecodeError, DecodeResult, DecodedEvent, DecoderCapabilities, DecoderIdentity, DecoderMetadata, EventKind,
 };
@@ -208,6 +207,34 @@ impl Token2022Decoder {
 
     /// Parse a single extension.
     fn parse_extension(ext_type: u16, data: &[u8]) -> Token2022Extension {
+        /// Token-2022 stores an absent pubkey as 32 zero bytes rather than as a
+        /// tagged option, so all-zero means None.
+        fn optional_pubkey(data: &[u8], offset: usize) -> Option<Pubkey> {
+            let bytes: [u8; 32] = data.get(offset..offset + 32)?.try_into().ok()?;
+            (bytes != [0u8; 32]).then(|| Pubkey::new_from_array(bytes))
+        }
+
+        fn read_u64(data: &[u8], offset: usize) -> u64 {
+            data.get(offset..offset + 8)
+                .and_then(|b| b.try_into().ok())
+                .map(u64::from_le_bytes)
+                .unwrap_or(0)
+        }
+
+        fn read_u16(data: &[u8], offset: usize) -> u16 {
+            data.get(offset..offset + 2)
+                .and_then(|b| b.try_into().ok())
+                .map(u16::from_le_bytes)
+                .unwrap_or(0)
+        }
+
+        fn unknown(ext_type: u16, data: &[u8]) -> Token2022Extension {
+            Token2022Extension::Unknown {
+                extension_type: ext_type,
+                data: data.to_vec(),
+            }
+        }
+
         match ext_type {
             extension_type::TRANSFER_FEE_AMOUNT => {
                 if data.len() >= 8 {
@@ -219,6 +246,84 @@ impl Token2022Decoder {
                         data: data.to_vec(),
                     }
                 }
+            }
+            extension_type::TRANSFER_FEE_CONFIG => {
+                // authority(32) + withdraw authority(32) + withheld(8)
+                // + older TransferFee(18) + newer TransferFee(18).
+                // A TransferFee is epoch(8) + maximum_fee(8) + basis_points(2),
+                // and the *newer* one is what applies from the next epoch, so
+                // that is the pair reported here.
+                const NEWER_FEE_OFFSET: usize = 32 + 32 + 8 + 18;
+                if data.len() >= NEWER_FEE_OFFSET + 18 {
+                    let maximum_fee = read_u64(data, NEWER_FEE_OFFSET + 8);
+                    let transfer_fee_basis_points = read_u16(data, NEWER_FEE_OFFSET + 16);
+                    Token2022Extension::TransferFeeConfig {
+                        transfer_fee_config_authority: optional_pubkey(data, 0),
+                        withdraw_withheld_authority: optional_pubkey(data, 32),
+                        transfer_fee_basis_points,
+                        maximum_fee,
+                    }
+                } else {
+                    unknown(ext_type, data)
+                }
+            }
+            extension_type::MINT_CLOSE_AUTHORITY => {
+                // A single OptionalNonZeroPubkey. There is no variant for it, so
+                // it is reported by type with its bytes intact rather than
+                // silently discarded.
+                unknown(ext_type, data)
+            }
+            extension_type::PERMANENT_DELEGATE => Token2022Extension::PermanentDelegate {
+                delegate: optional_pubkey(data, 0),
+            },
+            extension_type::INTEREST_BEARING_CONFIG => {
+                const LEN: usize = 32 + 8 + 2 + 8 + 2;
+                if data.len() >= LEN {
+                    Token2022Extension::InterestBearingConfig {
+                        rate_authority: optional_pubkey(data, 0),
+                        initialization_timestamp: read_u64(data, 32) as i64,
+                        pre_update_average_rate: read_u16(data, 40) as i16,
+                        last_update_timestamp: read_u64(data, 42) as i64,
+                        current_rate: read_u16(data, 50) as i16,
+                    }
+                } else {
+                    unknown(ext_type, data)
+                }
+            }
+            extension_type::TRANSFER_HOOK => {
+                if data.len() >= 64 {
+                    Token2022Extension::TransferHook {
+                        authority: optional_pubkey(data, 0),
+                        program_id: optional_pubkey(data, 32),
+                    }
+                } else {
+                    unknown(ext_type, data)
+                }
+            }
+            extension_type::METADATA_POINTER => {
+                if data.len() >= 64 {
+                    Token2022Extension::MetadataPointer {
+                        authority: optional_pubkey(data, 0),
+                        metadata_address: optional_pubkey(data, 32),
+                    }
+                } else {
+                    unknown(ext_type, data)
+                }
+            }
+            extension_type::CONFIDENTIAL_TRANSFER_MINT => {
+                Token2022Extension::ConfidentialTransferMint
+            }
+            extension_type::CONFIDENTIAL_TRANSFER_ACCOUNT => {
+                Token2022Extension::ConfidentialTransferAccount
+            }
+            // A non-transferable *account* marker carries no payload; the mint
+            // side is NON_TRANSFERABLE above.
+            extension_type::NON_TRANSFERABLE_ACCOUNT => Token2022Extension::NonTransferable,
+            extension_type::TRANSFER_HOOK_ACCOUNT | extension_type::TOKEN_METADATA => {
+                // TransferHookAccount is a single "transferring" flag with no
+                // variant, and TokenMetadata is a variable-length TLV whose
+                // layout is worth doing properly rather than approximately.
+                unknown(ext_type, data)
             }
             extension_type::IMMUTABLE_OWNER => Token2022Extension::ImmutableOwner,
             extension_type::NON_TRANSFERABLE => Token2022Extension::NonTransferable,
@@ -295,7 +400,7 @@ impl AccountDecoder for Token2022Decoder {
             }));
         }
 
-        if data.len() >= Self::ACCOUNT_TYPE_OFFSET + 1 {
+        if data.len() > Self::ACCOUNT_TYPE_OFFSET {
             let account_type = data[Self::ACCOUNT_TYPE_OFFSET];
 
             match account_type {
@@ -367,6 +472,113 @@ impl AccountDecoder for Token2022Decoder {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Build a TLV extension blob: type(u16) + length(u16) + payload.
+    fn tlv(ext_type: u16, payload: &[u8]) -> Vec<u8> {
+        let mut out = ext_type.to_le_bytes().to_vec();
+        out.extend_from_slice(&(payload.len() as u16).to_le_bytes());
+        out.extend_from_slice(payload);
+        out
+    }
+
+    #[test]
+    fn a_transfer_fee_config_reports_the_fee_that_will_apply() {
+        // The newer of the two fee records is the one that takes effect, and
+        // reading the older one would understate a fee increase.
+        let authority = Pubkey::new_from_array([1u8; 32]);
+        let withdrawer = Pubkey::new_from_array([2u8; 32]);
+
+        let mut payload = authority.to_bytes().to_vec();
+        payload.extend_from_slice(&withdrawer.to_bytes());
+        payload.extend_from_slice(&0u64.to_le_bytes()); // withheld
+        // older: epoch 10, max 1_000, 50 bps
+        payload.extend_from_slice(&10u64.to_le_bytes());
+        payload.extend_from_slice(&1_000u64.to_le_bytes());
+        payload.extend_from_slice(&50u16.to_le_bytes());
+        // newer: epoch 11, max 5_000, 250 bps
+        payload.extend_from_slice(&11u64.to_le_bytes());
+        payload.extend_from_slice(&5_000u64.to_le_bytes());
+        payload.extend_from_slice(&250u16.to_le_bytes());
+
+        let parsed = Token2022Decoder::parse_extension(1, &payload);
+        assert_eq!(
+            parsed,
+            Token2022Extension::TransferFeeConfig {
+                transfer_fee_config_authority: Some(authority),
+                withdraw_withheld_authority: Some(withdrawer),
+                transfer_fee_basis_points: 250,
+                maximum_fee: 5_000,
+            }
+        );
+    }
+
+    #[test]
+    fn an_all_zero_authority_is_absent_rather_than_the_zero_pubkey() {
+        // Token-2022 encodes "no authority" as 32 zero bytes, not as a tagged
+        // option. Reporting Pubkey::default() would name a real address nobody
+        // controls as the permanent delegate.
+        let parsed = Token2022Decoder::parse_extension(12, &[0u8; 32]);
+        assert_eq!(parsed, Token2022Extension::PermanentDelegate { delegate: None });
+
+        let delegate = Pubkey::new_from_array([9u8; 32]);
+        let parsed = Token2022Decoder::parse_extension(12, &delegate.to_bytes());
+        assert_eq!(
+            parsed,
+            Token2022Extension::PermanentDelegate {
+                delegate: Some(delegate)
+            }
+        );
+    }
+
+    #[test]
+    fn a_metadata_pointer_reports_both_halves() {
+        let authority = Pubkey::new_from_array([4u8; 32]);
+        let metadata = Pubkey::new_from_array([5u8; 32]);
+        let mut payload = authority.to_bytes().to_vec();
+        payload.extend_from_slice(&metadata.to_bytes());
+
+        assert_eq!(
+            Token2022Decoder::parse_extension(18, &payload),
+            Token2022Extension::MetadataPointer {
+                authority: Some(authority),
+                metadata_address: Some(metadata),
+            }
+        );
+    }
+
+    #[test]
+    fn a_truncated_extension_is_reported_rather_than_guessed_at() {
+        // Half a transfer fee config must not be read as a whole one with
+        // zeroes in the missing half.
+        let parsed = Token2022Decoder::parse_extension(1, &[7u8; 40]);
+        assert!(
+            matches!(parsed, Token2022Extension::Unknown { extension_type: 1, .. }),
+            "a short payload should keep its bytes rather than decode partially"
+        );
+    }
+
+    #[test]
+    fn extensions_are_walked_in_sequence_and_stop_at_a_bad_length() {
+        // A length field that runs past the buffer is attacker-controlled;
+        // parsing must stop rather than read out of bounds.
+        let mut blob = tlv(7, &[]); // ImmutableOwner
+        blob.extend_from_slice(&tlv(9, &[])); // NonTransferable
+        let good = Token2022Decoder::parse_extensions(&blob);
+        assert_eq!(good.len(), 2);
+        assert_eq!(good[0], Token2022Extension::ImmutableOwner);
+        assert_eq!(good[1], Token2022Extension::NonTransferable);
+
+        let mut truncated = tlv(7, &[]);
+        truncated.extend_from_slice(&1u16.to_le_bytes());
+        truncated.extend_from_slice(&u16::MAX.to_le_bytes()); // claims 65535 bytes
+        truncated.extend_from_slice(&[0u8; 4]);
+        let parsed = Token2022Decoder::parse_extensions(&truncated);
+        assert_eq!(
+            parsed.len(),
+            1,
+            "the impossible length ends the walk instead of over-reading"
+        );
+    }
     use account_decoder_core::TypedEvent;
 
     #[test]
