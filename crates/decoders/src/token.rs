@@ -327,21 +327,18 @@ impl AccountDecoder for TokenDecoder {
 
     fn decode_account(&self, data: &[u8]) -> DecodeResult<Box<dyn DecodedEvent>> {
         // Determine account type by size
+        // Exact sizes only. SPL Token accounts are fixed-size structs, so
+        // anything else is not one -- the previous `len >= 165` fallback made
+        // this decoder claim a 752-byte Raydium pool as a token account and
+        // report a mint and owner read out of the middle of it. It also
+        // contradicted `can_decode`, which was already strict.
         match data.len() {
             MINT_SIZE => Ok(Box::new(Self::decode_mint(data)?)),
             TOKEN_ACCOUNT_SIZE => Ok(Box::new(Self::decode_token_account(data)?)),
             MULTISIG_SIZE => Ok(Box::new(Self::decode_multisig(data)?)),
-            len if len >= TOKEN_ACCOUNT_SIZE => {
-                // Try token account first (most common)
-                Ok(Box::new(Self::decode_token_account(data)?))
-            }
-            len if len >= MINT_SIZE => {
-                // Try mint
-                Ok(Box::new(Self::decode_mint(data)?))
-            }
-            _ => Err(DecodeError::invalid_format(format!(
-                "unknown token account size: {} bytes",
-                data.len()
+            len => Err(DecodeError::invalid_format(format!(
+                "{len} bytes is not an SPL Token account: expected {MINT_SIZE} (mint), \
+                 {TOKEN_ACCOUNT_SIZE} (token account) or {MULTISIG_SIZE} (multisig)"
             ))),
         }
     }
@@ -524,6 +521,28 @@ impl InstructionDecoder for TokenDecoder {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_the_three_real_sizes_are_accepted() {
+        // The sizes are the whole type tag here: SPL Token accounts carry no
+        // discriminator, so length is all a decoder has to go on. Accepting
+        // anything larger means decoding another program's account as a token
+        // account and reporting whatever happened to sit at those offsets.
+        let decoder = TokenDecoder::new();
+
+        for len in [MINT_SIZE, TOKEN_ACCOUNT_SIZE, MULTISIG_SIZE] {
+            assert!(decoder.can_decode(&vec![0u8; len]), "{len} is a real size");
+        }
+
+        for len in [0usize, 81, 83, 164, 166, 354, 356, 752, 866, 10_000] {
+            let data = vec![0u8; len];
+            assert!(!decoder.can_decode(&data), "{len} is not an SPL Token size");
+            assert!(
+                decoder.decode_account(&data).is_err(),
+                "{len} bytes must not decode as a token account"
+            );
+        }
+    }
     use account_decoder_core::TypedEvent;
 
     #[test]

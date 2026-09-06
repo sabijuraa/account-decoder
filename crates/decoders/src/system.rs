@@ -176,27 +176,35 @@ impl DecoderIdentity for SystemDecoder {
 impl AccountDecoder for SystemDecoder {
 
     fn decode_account(&self, data: &[u8]) -> DecodeResult<Box<dyn DecodedEvent>> {
-        // Check if this is a nonce account by size
+        // A nonce account is the only System-owned account with a layout.
         if data.len() == NONCE_ACCOUNT_SIZE {
-            // Try to decode as nonce
-            match Self::decode_nonce(data) {
-                Ok(nonce) if nonce.version == 1 => {
+            if let Ok(nonce) = Self::decode_nonce(data) {
+                if nonce.version == 1 {
                     return Ok(Box::new(nonce));
                 }
-                _ => {}
             }
         }
 
-        // Default to basic system account
-        Ok(Box::new(SystemAccount {
-            lamports: 0, // We don't have lamports in the data
-            data: data.to_vec(),
-        }))
+        // Otherwise the only System-owned account that means anything is an
+        // empty one: a plain lamport holder. Accepting arbitrary bytes here is
+        // what made this decoder claim every account it was ever shown --
+        // including a 752-byte Raydium pool -- which made registry dispatch and
+        // any "which decoder handles this?" search useless.
+        if data.is_empty() {
+            return Ok(Box::new(SystemAccount {
+                lamports: 0,
+                data: Vec::new(),
+            }));
+        }
+
+        Err(DecodeError::invalid_format(format!(
+            "{} bytes is neither an empty system account nor a {NONCE_ACCOUNT_SIZE}-byte nonce account",
+            data.len()
+        )))
     }
 
     fn can_decode(&self, data: &[u8]) -> bool {
-        // System accounts can be any size
-        true
+        data.is_empty() || data.len() == NONCE_ACCOUNT_SIZE
     }
 
 }

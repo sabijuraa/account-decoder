@@ -176,7 +176,11 @@ impl RaydiumAmmDecoder {
 
     /// Decode a pool account.
     pub fn decode_amm_info(data: &[u8]) -> DecodeResult<AmmInfo> {
-        if data.len() < AMM_INFO_SIZE {
+        // Exactly, not at least. An AmmInfo is a fixed-size C struct with no
+        // discriminator, so the length is the only type tag there is; accepting
+        // anything longer means decoding another program's larger account and
+        // reporting the mints found at those offsets.
+        if data.len() != AMM_INFO_SIZE {
             return Err(DecodeError::insufficient_data(AMM_INFO_SIZE, data.len()));
         }
 

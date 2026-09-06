@@ -83,8 +83,8 @@ pub use account_decoder_borsh_util::{
 // Re-export built-in decoders (when feature enabled)
 #[cfg(feature = "builtin-decoders")]
 pub use account_decoder_decoders::{
-    program_ids, Mint, Multisig, NonceAccount, SystemAccount, SystemDecoder,
-    Token2022Decoder, TokenAccount, TokenDecoder,
+    program_ids, AmmFees, AmmInfo, Mint, Multisig, NonceAccount, RaydiumAmmDecoder,
+    SystemAccount, SystemDecoder, Token2022Decoder, TokenAccount, TokenDecoder,
 };
 
 // Re-export anchor codegen (when feature enabled)
@@ -155,6 +155,9 @@ pub fn default_registry() -> DecoderRegistry {
     let system_decoder = SystemDecoder::new();
     registry.register_account(Box::new(system_decoder.clone()));
     registry.register_instruction(Box::new(system_decoder));
+
+    // Register Raydium AMM v4
+    registry.register_account(Box::new(RaydiumAmmDecoder::new()));
 
     registry
 }

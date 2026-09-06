@@ -177,6 +177,42 @@ impl Token2022Decoder {
     const ACCOUNT_TYPE_OFFSET: usize = 165;
 
     /// Parse extensions from the extension data.
+    /// Whether a TLV region is well formed all the way to its end.
+    ///
+    /// The account-type byte at offset 165 is one byte of signal, and one byte
+    /// is not enough to tell a Token-2022 account from any other program's
+    /// account that happens to hold a 1 or a 2 there -- a Raydium pool does.
+    /// Requiring the extension region to walk cleanly to its end is the real
+    /// check: arbitrary bytes almost never do.
+    fn tlv_is_well_formed(data: &[u8]) -> bool {
+        let mut offset = 0;
+        let mut entries = 0;
+
+        while offset < data.len() {
+            // Trailing zero padding is normal once the entries are done.
+            if data[offset..].iter().all(|b| *b == 0) {
+                break;
+            }
+
+            if offset + 4 > data.len() {
+                return false;
+            }
+
+            let ext_len =
+                u16::from_le_bytes([data[offset + 2], data[offset + 3]]) as usize;
+            offset += 4;
+
+            if offset + ext_len > data.len() {
+                return false;
+            }
+
+            offset += ext_len;
+            entries += 1;
+        }
+
+        entries > 0
+    }
+
     fn parse_extensions(data: &[u8]) -> Vec<Token2022Extension> {
         let mut extensions = Vec::new();
         let mut offset = 0;
@@ -400,8 +436,26 @@ impl AccountDecoder for Token2022Decoder {
             }));
         }
 
+        // A plain token account is exactly 165 bytes with no type byte.
+        if data.len() == Self::ACCOUNT_TYPE_OFFSET {
+            let base = crate::token::TokenDecoder::decode_token_account(data)?;
+            return Ok(Box::new(Token2022Account {
+                base,
+                extensions: vec![],
+            }));
+        }
+
         if data.len() > Self::ACCOUNT_TYPE_OFFSET {
             let account_type = data[Self::ACCOUNT_TYPE_OFFSET];
+            let tlv = &data[Self::ACCOUNT_TYPE_OFFSET + 1..];
+
+            if !matches!(account_type, 1 | 2) || !Self::tlv_is_well_formed(tlv) {
+                return Err(DecodeError::invalid_format(format!(
+                    "{} bytes with account type {account_type} is not a Token-2022 account: \
+                     the extension region does not parse",
+                    data.len()
+                )));
+            }
 
             match account_type {
                 1 => {
@@ -479,6 +533,33 @@ mod tests {
         out.extend_from_slice(&(payload.len() as u16).to_le_bytes());
         out.extend_from_slice(payload);
         out
+    }
+
+    #[test]
+    fn another_programs_account_is_not_claimed_as_token_2022() {
+        // The regression this guards: a 752-byte Raydium pool has a 2 at offset
+        // 165, so an account-type check alone accepted it and reported a mint
+        // and owner read out of the middle of a liquidity pool.
+        let decoder = Token2022Decoder::new();
+        let mut pool = vec![0u8; 752];
+        pool[165] = 2;
+        for (i, byte) in pool.iter_mut().enumerate().skip(166) {
+            *byte = (i % 251) as u8; // arbitrary, non-TLV-shaped
+        }
+
+        assert!(
+            decoder.decode_account(&pool).is_err(),
+            "an account whose extension region does not parse is not Token-2022"
+        );
+    }
+
+    #[test]
+    fn a_well_formed_extension_region_is_accepted() {
+        let mut account = vec![0u8; 165];
+        account[164] = 1; // plausible base
+        account.push(2); // account type: Account
+        account.extend_from_slice(&tlv(7, &[])); // ImmutableOwner
+        assert!(Token2022Decoder::tlv_is_well_formed(&account[166..]));
     }
 
     #[test]
