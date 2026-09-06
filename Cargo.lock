@@ -48,10 +48,12 @@ version = "0.1.0"
 dependencies = [
  "account-decoder-borsh-util",
  "account-decoder-core",
+ "base64 0.22.1",
  "borsh 1.8.1",
  "criterion",
  "pretty_assertions",
  "proptest",
+ "serde_json",
  "solana-program",
  "solana-sdk",
  "thiserror",

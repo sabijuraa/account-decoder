@@ -21,10 +21,12 @@
 
 mod system;
 mod token;
+pub mod raydium_amm;
 mod token_2022;
 
 pub use system::{SystemDecoder, SystemAccount, NonceAccount};
 pub use token::{TokenDecoder, TokenAccount, Mint, Multisig};
+pub use raydium_amm::{AmmFees, AmmInfo, RaydiumAmmDecoder, RAYDIUM_AMM_V4_PROGRAM_ID};
 pub use token_2022::Token2022Decoder;
 
 /// Program IDs for built-in decoders.

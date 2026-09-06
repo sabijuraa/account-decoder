@@ -20,6 +20,8 @@ tracing = { workspace = true }
 proptest = { workspace = true }
 pretty_assertions = { workspace = true }
 criterion = { workspace = true }
+base64 = "0.22"
+serde_json = { workspace = true }
 
 [[bench]]
 name = "decode_path"
