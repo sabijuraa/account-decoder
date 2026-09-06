@@ -1,165 +1,57 @@
-# ADR 001: Decoder Trait Design
+# ADR 001: Splitting identity from decoding
 
-## Status
-
-Accepted
+Status: accepted. Implemented in `crates/core/src/decoder.rs`.
 
 ## Context
 
-We need to define traits for decoding Solana account and instruction data. The design must balance:
-
-1. **Type Safety**: Decoders should produce typed outputs, not raw bytes
-2. **Uniformity**: All decoded data should implement a common interface for registry use
-3. **Extensibility**: New decoders can be added without modifying core code
-4. **Performance**: Support zero-copy and minimal allocation patterns
-5. **Ergonomics**: Easy to implement for common cases
+A decoder has to do two unrelated things: say what it is, and decode bytes. The
+registry needs the first before it ever asks for the second — to list what is
+registered, to report which program a decoder serves, to answer "what handles
+this?" — and an admin view needs it for decoders that are never invoked at all.
 
 ## Decision
 
-### Trait Hierarchy
+Three traits rather than one.
 
-We define two primary traits:
+`DecoderIdentity` carries metadata and capabilities, plus `as_any` for
+downcasting. `AccountDecoder` and `InstructionDecoder` each require it and add
+one method. `ProgramDecoder` is a blanket impl over anything implementing both,
+so a decoder that covers a whole program gets that for free rather than writing a
+third impl.
 
-```rust
-pub trait AccountDecoder: Send + Sync + Debug {
-    fn metadata(&self) -> DecoderMetadata;
-    fn capabilities(&self) -> DecoderCapabilities;
-    fn decode_account(&self, data: &[u8]) -> DecodeResult<Box<dyn DecodedEvent>>;
-    fn decode_account_with_key(&self, pubkey: &Pubkey, data: &[u8]) -> DecodeResult<Box<dyn DecodedEvent>>;
-    fn can_decode(&self, data: &[u8]) -> bool;
-    fn as_any(&self) -> &dyn Any;
-}
+The split means a decoder can be listed, described and dispatched to without
+being run, and a program that only produces accounts implements only the account
+half.
 
-pub trait InstructionDecoder: Send + Sync + Debug {
-    fn metadata(&self) -> DecoderMetadata;
-    fn decode_instruction(&self, data: &[u8]) -> DecodeResult<Box<dyn DecodedEvent>>;
-    fn decode_instruction_with_accounts(&self, data: &[u8], accounts: &[Pubkey]) -> DecodeResult<Box<dyn DecodedEvent>>;
-    fn as_any(&self) -> &dyn Any;
-}
-```
+## `can_decode` is part of the contract
 
-### Associated Types vs Dynamic Dispatch
+Every decoder answers `can_decode` alongside `decode_account`, and the two must
+agree: **a decoder must never successfully decode data its own `can_decode`
+rejects.**
 
-We chose dynamic dispatch (`Box<dyn DecodedEvent>`) over associated types because:
-
-1. **Registry Compatibility**: A registry must store heterogeneous decoders
-2. **Runtime Flexibility**: Decoders can return different event types based on discriminator
-3. **Simpler API**: Users don't need to specify type parameters
-
-The cost is one heap allocation per decode, acceptable for our use case.
-
-### DecodedEvent Trait
-
-```rust
-pub trait DecodedEvent: Debug + Send + Sync {
-    fn event_kind(&self) -> EventKind;
-    fn event_type(&self) -> &'static str;
-    fn program_name(&self) -> &'static str;
-    fn as_any(&self) -> &dyn Any;
-}
-```
-
-The `as_any()` method enables type-safe downcasting:
-
-```rust
-if let Some(mint) = event.downcast_ref::<Mint>() {
-    println!("Supply: {}", mint.supply);
-}
-```
-
-### Error Handling
-
-We use a custom error enum rather than generic errors:
-
-```rust
-pub enum DecodeError {
-    InsufficientData { expected: usize, actual: usize },
-    UnknownDiscriminator(Vec<u8>),
-    DeserializationError(String),
-    UnknownProgram(Pubkey),
-    // ...
-}
-```
-
-This allows:
-- Pattern matching for error recovery
-- Rich context for debugging
-- Typed conversion from underlying errors
-
-### Metadata and Capabilities
-
-Decoders provide metadata for observability:
-
-```rust
-pub struct DecoderMetadata {
-    pub program_name: &'static str,
-    pub program_id: Pubkey,
-    pub version: &'static str,
-    pub description: Option<&'static str>,
-}
-
-pub struct DecoderCapabilities {
-    pub zero_copy: bool,
-    pub detailed_fields: bool,
-    pub streaming: bool,
-    pub account_types: Vec<&'static str>,
-}
-```
-
-This enables:
-- Debug logging
-- Feature detection
-- Performance optimization decisions
+This is not a nicety. Solana accounts mostly carry no type tag, so length and
+discriminator are all a decoder has to go on, and a decoder that accepts
+"at least 165 bytes" will confidently decode a 752-byte pool from another program
+and report a mint and an owner read out of the middle of it. Every decoder in
+this workspace had that bug in some form; `crates/decoders/tests/decoder_discipline.rs`
+now holds all of them to the rule against real accounts from other programs.
 
 ## Consequences
 
-### Positive
+Downcasting is how a caller recovers the concrete type: `decode_account` returns
+`Box<dyn DecodedEvent>`, and `TypedEvent::downcast_ref` gets back to the struct.
+That costs a vtable hop and gives the registry a uniform return type, which is the
+trade the registry exists to make.
 
-- Clear separation between decoding logic and event types
-- Easy to add new decoders without changing core
-- Type-safe downcasting when specific types are needed
-- Rich error information for debugging
+`DecoderCapabilities` is optional with a default, so a minimal decoder implements
+two methods. The generated decoders populate it from the IDL, which means a
+generated decoder describes itself as well as a hand-written one.
 
-### Negative
+## What was rejected
 
-- One heap allocation per decode (`Box<dyn DecodedEvent>`)
-- Downcasting requires knowing concrete types
-- Traits are not object-safe without workarounds
+*One trait with both methods.* Programs that only produce accounts would have to
+implement an instruction method that errors, and the registry would have no way
+to tell a real instruction decoder from a stub.
 
-### Mitigations
-
-- For high-performance scenarios, implement direct parsing methods on decoders
-- Provide helper traits (`TypedEvent`) for ergonomic downcasting
-- Document concrete types in decoder documentation
-
-## Alternatives Considered
-
-### Associated Types
-
-```rust
-trait AccountDecoder {
-    type Output: DecodedEvent;
-    fn decode(&self, data: &[u8]) -> Result<Self::Output>;
-}
-```
-
-Rejected because registries would need type erasure anyway, and this complicates multi-type decoders.
-
-### Enum-Based Events
-
-```rust
-enum TokenEvent {
-    Mint(Mint),
-    TokenAccount(TokenAccount),
-}
-```
-
-Rejected because it doesn't scale to many programs and requires modifying the enum for new types.
-
-### Generic Return Types
-
-```rust
-fn decode<T: DecodedEvent>(&self, data: &[u8]) -> Result<T>;
-```
-
-Rejected because callers would need to know the exact type, defeating the purpose of a registry.
+*An enum of known programs.* Adding a program would mean editing the core, which
+is the thing this design exists to avoid.

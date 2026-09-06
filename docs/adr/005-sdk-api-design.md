@@ -1,306 +1,51 @@
-# ADR 005: SDK API Design
+# ADR 005: One crate to depend on
 
-## Status
-
-Accepted
+Status: accepted. Implemented in `crates/sdk/`.
 
 ## Context
 
-The SDK crate is the primary interface for users. It must:
-
-1. Provide a clean, intuitive API
-2. Re-export necessary types from internal crates
-3. Support different use cases (simple → advanced)
-4. Maintain backward compatibility
-5. Be well-documented
+The workspace is five crates. A caller who wants to decode an account should not
+have to know that, or work out which of them holds `DecodeError`.
 
 ## Decision
 
-### Layered API Design
+`account-decoder-sdk` re-exports the public surface of the others and is the only
+crate a consumer names in `Cargo.toml`. `default_registry()` returns a registry
+with the built-ins already in it; `empty_registry()` and `registry_builder()`
+are for a service that wants a narrower set.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Convenience Layer                        │
-│   default_registry(), prelude::*, quick-start functions    │
-├─────────────────────────────────────────────────────────────┤
-│                    Standard Layer                           │
-│   DecoderRegistry, RegistryBuilder, specific decoders      │
-├─────────────────────────────────────────────────────────────┤
-│                    Advanced Layer                           │
-│   Traits, zero-copy utilities, codegen                     │
-└─────────────────────────────────────────────────────────────┘
-```
+Built-in decoders and Anchor codegen are features, so an application that only
+needs the traits does not compile Raydium or `syn`.
 
-### Prelude Module
+## The prelude includes `DecoderIdentity`
 
-The prelude provides the most common imports:
+It has to. `DecoderIdentity` is a supertrait of both decoder traits, so a caller
+who imported only the prelude could not implement a decoder at all — the trait
+they needed was not in scope. That was a real gap, found by writing the
+extensibility test in `crates/sdk/tests/extensibility.rs` from the outside, and
+it is the reason that test exists: it adds a program the workspace has never
+heard of, using nothing but the published API.
 
-```rust
-pub mod prelude {
-    // Traits
-    pub use crate::{
-        AccountDecoder, InstructionDecoder, DecodedEvent, TypedEvent,
-    };
-    
-    // Types
-    pub use crate::{
-        DecoderRegistry, DecodeError, DecodeResult,
-        DecoderMetadata, DecoderCapabilities,
-    };
-    
-    // Built-in decoders (when feature enabled)
-    #[cfg(feature = "builtin-decoders")]
-    pub use crate::{
-        TokenDecoder, Token2022Decoder, SystemDecoder,
-        TokenAccount, Mint, program_ids::*,
-    };
-    
-    // Convenience function
-    #[cfg(feature = "builtin-decoders")]
-    pub use crate::default_registry;
-}
-```
+## Doc examples are tests
 
-Usage:
-```rust
-use account_decoder_sdk::prelude::*;
-```
-
-### Feature Flags
-
-```toml
-[features]
-default = ["builtin-decoders"]
-builtin-decoders = ["account-decoder-decoders"]
-anchor-codegen = ["account-decoder-anchor-gen"]
-full = ["builtin-decoders", "anchor-codegen"]
-```
-
-This allows:
-- Minimal builds without built-in decoders
-- Codegen only when needed
-- Full-featured builds
-
-### Convenience Functions
-
-```rust
-// Quickest path to working decoder
-pub fn default_registry() -> DecoderRegistry {
-    let mut registry = DecoderRegistry::new();
-    registry.register_account(Box::new(TokenDecoder::new()));
-    registry.register_account(Box::new(Token2022Decoder::new()));
-    registry.register_account(Box::new(SystemDecoder::new()));
-    registry
-}
-
-// For custom configurations
-pub fn registry_builder() -> RegistryBuilder {
-    RegistryBuilder::new()
-}
-
-// Empty starting point
-pub fn empty_registry() -> DecoderRegistry {
-    DecoderRegistry::new()
-}
-```
-
-### Documentation Strategy
-
-1. **Crate-level docs**: Quick start, feature overview
-2. **Module-level docs**: Detailed usage, examples
-3. **Type-level docs**: API reference, parameters
-4. **Examples directory**: Complete working examples
-
-```rust
-//! # Account Decoder SDK
-//!
-//! ## Quick Start
-//!
-//! ```rust
-//! use account_decoder_sdk::prelude::*;
-//!
-//! let registry = default_registry();
-//! let event = registry.decode_account(&TOKEN_PROGRAM_ID, &data)?;
-//! ```
-//!
-//! ## Features
-//!
-//! - `builtin-decoders`: Token, Token-2022, System decoders
-//! - `anchor-codegen`: Generate decoders from Anchor IDL
-```
-
-### Versioning Strategy
-
-We follow semantic versioning:
-
-| Change Type                      | Version Bump |
-|---------------------------------|--------------|
-| Bug fix                         | Patch (0.1.x)|
-| New decoder, new field          | Minor (0.x.0)|
-| Trait change, removed API       | Major (x.0.0)|
-
-Deprecation policy:
-1. Mark as `#[deprecated]` in minor release
-2. Document migration path
-3. Remove in next major release
-
-### Error Handling Philosophy
-
-Users should never need `unwrap()` on decode results:
-
-```rust
-// Good: Pattern matching on specific errors
-match registry.decode_account(&program_id, &data) {
-    Ok(event) => handle_event(event),
-    Err(DecodeError::UnknownProgram(_)) => {
-        // Expected for unknown programs
-    }
-    Err(e) => {
-        tracing::warn!("Decode failed: {}", e);
-    }
-}
-
-// Good: Using try_decode for optional handling
-if let Some(Ok(event)) = registry.try_decode_account(&program_id, &data) {
-    handle_event(event);
-}
-```
+Every example in the SDK docs compiles and runs under `cargo test --doc`. None
+is marked `ignore` or `no_run`. An example that does not run is a claim nobody
+checks, and several of these were wrong before they were made to run — wrong
+error variants, wrong field names, missing imports.
 
 ## Consequences
 
-### Positive
+Adding a type to the public API means adding it to the SDK re-exports, which is
+a small tax and a useful checkpoint: it makes "is this public?" a decision rather
+than an accident of `pub`.
 
-- **Discoverable**: Prelude makes common imports easy
-- **Flexible**: Feature flags control dependencies
-- **Stable**: Clear versioning policy
-- **Documented**: Multi-level documentation
+A caller who wants one decoder and no registry can still depend on
+`account-decoder-decoders` directly. The SDK is the front door, not a wall.
 
-### Negative
+## What was rejected
 
-- **Feature Complexity**: Multiple feature combinations
-- **Re-export Maintenance**: Must keep re-exports in sync
-- **Version Coordination**: All crates versioned together
+*Publishing the five crates as the interface.* It exposes the internal split as
+API, so moving a type between crates becomes a breaking change for everyone.
 
-### Public API Surface
-
-The following are considered stable API:
-
-```rust
-// Functions
-pub fn default_registry() -> DecoderRegistry;
-pub fn empty_registry() -> DecoderRegistry;
-pub fn registry_builder() -> RegistryBuilder;
-
-// Traits
-pub trait AccountDecoder { ... }
-pub trait InstructionDecoder { ... }
-pub trait DecodedEvent { ... }
-
-// Types
-pub struct DecoderRegistry { ... }
-pub struct RegistryBuilder { ... }
-pub enum DecodeError { ... }
-
-// Type aliases
-pub type DecodeResult<T> = Result<T, DecodeError>;
-```
-
-Changes to these require a major version bump.
-
-### Internal API
-
-The following are NOT stable:
-- Private modules
-- Internal helper functions
-- Implementation details of decoders
-
-## Alternatives Considered
-
-### Single Crate Architecture
-
-Everything in one crate:
-```
-account-decoder/
-├── src/
-│   ├── core/
-│   ├── borsh/
-│   ├── decoders/
-│   └── codegen/
-```
-
-Rejected because:
-- Slower compilation
-- Can't feature-flag internal code
-- Harder to maintain
-
-### Workspace Without SDK
-
-Users import individual crates:
-```rust
-use account_decoder_core::*;
-use account_decoder_decoders::*;
-```
-
-Rejected because:
-- More imports needed
-- Version coordination harder
-- Less discoverable
-
-### Facade Pattern
-
-SDK has no implementation, only re-exports:
-```rust
-// sdk/src/lib.rs
-pub use account_decoder_core::*;
-pub use account_decoder_decoders::*;
-```
-
-Accepted (this is what we do), but we also add convenience functions and prelude.
-
-## Example Use Cases
-
-### 1. Basic Indexer
-
-```rust
-use account_decoder_sdk::prelude::*;
-
-fn main() {
-    let registry = default_registry();
-    
-    for account in get_accounts() {
-        if let Some(Ok(event)) = registry.try_decode_account(
-            &account.owner,
-            &account.data,
-        ) {
-            process_event(event);
-        }
-    }
-}
-```
-
-### 2. Custom Decoder Integration
-
-```rust
-use account_decoder_sdk::prelude::*;
-
-fn main() {
-    let registry = registry_builder()
-        .with_account(TokenDecoder::new())
-        .with_account(MyCustomDecoder::new())
-        .with_warnings(true)
-        .build();
-}
-```
-
-### 3. Anchor Codegen
-
-```rust
-use account_decoder_sdk::{CodeGenerator, GeneratorConfig, IdlParser};
-
-fn main() {
-    let idl = IdlParser::parse_file("idl/my_program.json")?;
-    let gen = CodeGenerator::new(GeneratorConfig::default().with_serde());
-    let code = gen.generate(&idl)?;
-    std::fs::write("src/generated.rs", code.to_string())?;
-}
-```
+*Folding everything into one crate.* The codegen pulls in `syn`, `quote` and
+`prettyplease`; a runtime decoding path should not compile a parser generator.
