@@ -107,16 +107,28 @@ impl AnchorDiscriminator {
     /// Common namespaces:
     /// - "account" for account types
     /// - "global" for instructions
-    #[cfg(feature = "sha2")]
     pub fn compute(namespace: &str, name: &str) -> Self {
         use sha2::{Digest, Sha256};
 
-        let preimage = format!("{}:{}", namespace, name);
+        let preimage = format!("{namespace}:{name}");
         let hash = Sha256::digest(preimage.as_bytes());
 
         let mut bytes = [0u8; 8];
         bytes.copy_from_slice(&hash[..8]);
         Self::new(bytes)
+    }
+
+    /// The discriminator Anchor gives an account type.
+    pub fn account(type_name: &str) -> Self {
+        Self::compute("account", type_name)
+    }
+
+    /// The discriminator Anchor gives an instruction.
+    ///
+    /// Anchor snake-cases the method name before hashing, so the caller must
+    /// pass the name in the form the IDL uses.
+    pub fn instruction(method_name: &str) -> Self {
+        Self::compute("global", method_name)
     }
 
     /// Check if data starts with this discriminator.
@@ -189,6 +201,62 @@ impl<const N: usize, V> Default for DiscriminatorTable<N, V> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn anchor_discriminators_match_the_ones_on_chain() {
+        // These are not computed expectations -- they are the first eight bytes
+        // of accounts and instructions as they exist on mainnet today. If the
+        // preimage or the hash were wrong, generated decoders would silently
+        // fail to match any real account.
+        //
+        // Marinade Finance `State`, account 8szGkuLTAux9XMgZ2vtY39jVSowEcpBfFfD8hXSEqdGC.
+        assert_eq!(
+            AnchorDiscriminator::account("State").as_bytes(),
+            &[216, 146, 107, 94, 104, 75, 182, 177]
+        );
+
+        // Anchor hashes the *snake_case* method name for instructions.
+        assert_eq!(
+            AnchorDiscriminator::instruction("deposit").as_bytes(),
+            &[242, 35, 198, 137, 82, 225, 242, 182]
+        );
+        assert_eq!(
+            AnchorDiscriminator::instruction("liquid_unstake").as_bytes(),
+            &[30, 30, 119, 240, 191, 227, 12, 16]
+        );
+    }
+
+    #[test]
+    fn the_namespace_is_part_of_the_preimage() {
+        // "account:X" and "global:X" must differ, or an account type and an
+        // instruction sharing a name would route to each other.
+        assert_ne!(
+            AnchorDiscriminator::account("Deposit").as_bytes(),
+            AnchorDiscriminator::instruction("Deposit").as_bytes()
+        );
+    }
+
+    #[test]
+    fn a_discriminator_table_routes_to_the_right_value() {
+        let mut table: DiscriminatorTable<8, &str> = DiscriminatorTable::new();
+        table.insert(Discriminator::new(*AnchorDiscriminator::account("State").as_bytes()), "State");
+        table.insert(
+            Discriminator::new(*AnchorDiscriminator::account("TicketAccountData").as_bytes()),
+            "TicketAccountData",
+        );
+
+        let state = AnchorDiscriminator::account("State");
+        let mut data = state.as_bytes().to_vec();
+        data.extend_from_slice(&[0u8; 32]);
+
+        assert_eq!(table.get(&data), Some(&"State"));
+        assert!(table.contains(&data));
+        assert_eq!(table.len(), 2);
+        assert!(!table.is_empty());
+
+        assert_eq!(table.get(&[0u8; 8]), None, "an unknown discriminator matches nothing");
+        assert_eq!(table.get(&[0u8; 3]), None, "and short data cannot match");
+    }
 
     #[test]
     fn test_read_discriminator() {

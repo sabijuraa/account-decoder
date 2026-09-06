@@ -31,12 +31,14 @@ pub struct IdlParser;
 impl IdlParser {
     /// Parse an IDL from a JSON string.
     pub fn parse(json: &str) -> IdlResult<IdlProgram> {
-        let idl: IdlProgram = serde_json::from_str(json)?;
+        let mut idl: IdlProgram = serde_json::from_str(json)?;
 
         // Validate required fields
         if idl.name.is_empty() {
             return Err(IdlError::InvalidIdl("program name is required".into()));
         }
+
+        fill_missing_discriminators(&mut idl);
 
         Ok(idl)
     }
@@ -48,6 +50,43 @@ impl IdlParser {
         })?;
         Self::parse(&json)
     }
+}
+
+/// Compute the discriminators that older IDLs leave out.
+///
+/// Anchor only started writing `discriminator` into the IDL in 0.30. Before
+/// that the value was implied by a convention: the first eight bytes of
+/// `sha256("account:<TypeName>")` for accounts and
+/// `sha256("global:<snake_case_name>")` for instructions. Without this, an IDL
+/// fetched from a program deployed with an older Anchor produces a decoder
+/// whose dispatch table is empty -- it compiles, and then matches nothing.
+fn fill_missing_discriminators(idl: &mut IdlProgram) {
+    use heck::ToSnakeCase;
+
+    for account in &mut idl.accounts {
+        if account.discriminator.is_empty() {
+            account.discriminator = anchor_discriminator("account", &account.name);
+        }
+    }
+
+    for instruction in &mut idl.instructions {
+        if instruction.discriminator.is_empty() {
+            let name = instruction.name.to_snake_case();
+            instruction.discriminator = anchor_discriminator("global", &name);
+        }
+    }
+}
+
+/// First eight bytes of `sha256("<namespace>:<name>")`.
+///
+/// Delegates to `borsh-util` rather than hashing here. There used to be two
+/// implementations of this -- one in each crate -- and the one in `borsh-util`
+/// was behind a `sha2` feature that was never declared, so it never compiled at
+/// all. Two copies of the rule that decides which decoder runs is one too many.
+pub fn anchor_discriminator(namespace: &str, name: &str) -> Vec<u8> {
+    account_decoder_borsh_util::AnchorDiscriminator::compute(namespace, name)
+        .as_bytes()
+        .to_vec()
 }
 
 /// An Anchor program IDL.
@@ -310,8 +349,13 @@ pub enum IdlType {
 }
 
 /// Complex IDL types.
+///
+/// Anchor writes these externally tagged, e.g. `{"defined": "State"}`,
+/// `{"option": {...}}`, `{"vec": {...}}`, `{"array": [{...}, 32]}`. Anchor
+/// 0.30 changed `defined` from a bare string to `{"name": "State"}`, so both
+/// spellings are accepted.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "kind", content = "value", rename_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
 pub enum IdlTypeComplex {
     /// Option<T>
     Option(Box<IdlType>),
@@ -323,10 +367,36 @@ pub enum IdlTypeComplex {
     Array(Box<IdlType>, usize),
 
     /// A defined type (reference by name).
-    Defined(String),
+    Defined(IdlDefinedType),
 
     /// A generic type.
     Generic(String),
+}
+
+/// The payload of a `defined` type reference.
+///
+/// Legacy IDLs write `{"defined": "State"}`; Anchor 0.30 and later write
+/// `{"defined": {"name": "State"}}`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum IdlDefinedType {
+    /// Legacy form: the type name directly.
+    Name(String),
+    /// Current form: an object carrying the name.
+    Named {
+        /// The referenced type name.
+        name: String,
+    },
+}
+
+impl IdlDefinedType {
+    /// The referenced type name, whichever spelling was used.
+    pub fn name(&self) -> &str {
+        match self {
+            IdlDefinedType::Name(n) => n,
+            IdlDefinedType::Named { name } => name,
+        }
+    }
 }
 
 impl IdlType {

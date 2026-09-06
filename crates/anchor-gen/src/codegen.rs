@@ -222,7 +222,7 @@ impl CodeGenerator {
             _ => quote! {},
         };
 
-        let event_impl = self.generate_event_impl(&account.name, "account");
+        let event_impl = self.generate_event_impl(&type_name, &account.name, "account");
 
         Ok(quote! {
             #docs
@@ -248,7 +248,7 @@ impl CodeGenerator {
         let docs = self.generate_docs(&instruction.docs);
 
         let field_tokens = self.generate_fields(&instruction.args)?;
-        let event_impl = self.generate_event_impl(&instruction.name, "instruction");
+        let event_impl = self.generate_event_impl(&type_name, &instruction.name, "instruction");
 
         Ok(quote! {
             #docs
@@ -282,8 +282,13 @@ impl CodeGenerator {
     }
 
     /// Generate DecodedEvent impl for a type.
-    fn generate_event_impl(&self, name: &str, kind: &str) -> TokenStream {
-        let type_name = format_ident!("{}", self.type_mapper.map_type_name(name));
+    ///
+    /// `type_name` is the identifier of the struct actually emitted, which is
+    /// not always derived from `event_name`: instruction structs get an
+    /// `Instruction` suffix so they cannot collide with a same-named account or
+    /// defined type.
+    fn generate_event_impl(&self, type_name: &syn::Ident, name: &str, kind: &str) -> TokenStream {
+        let type_name = type_name.clone();
         let event_kind = if kind == "account" {
             quote! { EventKind::Account }
         } else {
@@ -333,7 +338,12 @@ impl CodeGenerator {
 
                 Some(quote! {
                     [#(#disc_bytes),*] => {
-                        let value = #type_name::try_from_slice(&data[8..])?;
+                        // Deserialize from a cursor rather than `try_from_slice`:
+                        // Anchor accounts are frequently allocated larger than
+                        // the struct, and `try_from_slice` rejects any trailing
+                        // bytes with "Not all bytes read".
+                        let mut cursor = &data[8..];
+                        let value = #type_name::deserialize(&mut cursor)?;
                         Ok(Box::new(value))
                     }
                 })
@@ -407,7 +417,12 @@ impl CodeGenerator {
 
                 Some(quote! {
                     [#(#disc_bytes),*] => {
-                        let value = #type_name::try_from_slice(&data[8..])?;
+                        // Deserialize from a cursor rather than `try_from_slice`:
+                        // Anchor accounts are frequently allocated larger than
+                        // the struct, and `try_from_slice` rejects any trailing
+                        // bytes with "Not all bytes read".
+                        let mut cursor = &data[8..];
+                        let value = #type_name::deserialize(&mut cursor)?;
                         Ok(Box::new(value))
                     }
                 })

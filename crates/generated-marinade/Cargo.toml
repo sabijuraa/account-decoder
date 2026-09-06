@@ -1,0 +1,17 @@
+[package]
+name = "account-decoder-generated-marinade"
+description = "Decoder generated from the on-chain Marinade Finance Anchor IDL; proves the codegen output compiles and decodes real data"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+account-decoder-core = { workspace = true }
+borsh = { workspace = true }
+solana-sdk = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+base64 = "0.22"

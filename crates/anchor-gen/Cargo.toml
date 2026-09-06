@@ -15,6 +15,7 @@ proc-macro2 = { workspace = true }
 quote = { workspace = true }
 syn = { workspace = true }
 heck = { workspace = true }
+account-decoder-borsh-util = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 

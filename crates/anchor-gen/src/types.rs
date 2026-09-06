@@ -146,11 +146,12 @@ impl TypeMapper {
             IdlTypeComplex::Array(inner, size) => {
                 RustType::Array(Box::new(self.map(inner)), *size)
             }
-            IdlTypeComplex::Defined(name) => {
+            IdlTypeComplex::Defined(defined) => {
+                let name = defined.name();
                 if let Some(override_name) = self.type_overrides.get(name) {
                     RustType::Custom(override_name.clone())
                 } else {
-                    RustType::Custom(name.clone())
+                    RustType::Custom(name.to_string())
                 }
             }
             IdlTypeComplex::Generic(name) => RustType::Custom(name.clone()),

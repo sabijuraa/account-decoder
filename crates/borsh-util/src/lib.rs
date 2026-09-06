@@ -37,7 +37,9 @@ mod discriminator;
 mod reader;
 mod slice;
 
-pub use discriminator::{read_discriminator, Discriminator, AnchorDiscriminator};
+pub use discriminator::{
+    read_discriminator, AnchorDiscriminator, Discriminator, DiscriminatorTable,
+};
 pub use reader::{ZeroCopyReader, ZeroCopyError};
 pub use slice::{BorshSlice, SliceReader};
 
