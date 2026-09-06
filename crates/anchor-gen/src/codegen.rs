@@ -159,10 +159,17 @@ impl CodeGenerator {
             quote! {}
         };
 
+        // `#![doc = "..."]` rather than `//!`: a line comment inside `quote!` is
+        // emitted verbatim, so the interpolations were never substituted and
+        // every generated file carried a header reading literally
+        // "Generated decoder for #program_name v#version".
+        let header = format!(
+            "Generated from the Anchor IDL for {program_name} v{version}. Do not edit; \
+             regenerate with the `account-decoder generate` command."
+        );
+
         quote! {
-            //! Generated decoder for #program_name v#version
-            //!
-            //! This file was automatically generated. Do not edit manually.
+            #![doc = #header]
 
             use account_decoder_core::{
                 AccountDecoder, DecodeError, DecodeResult, DecodedEvent, DecoderCapabilities,
@@ -268,7 +275,8 @@ impl CodeGenerator {
             .map(|field| {
                 let name = format_ident!("{}", self.type_mapper.map_field_name(&field.name));
                 let rust_type = self.type_mapper.map(&field.r#type);
-                let type_str: proc_macro2::TokenStream = rust_type.to_rust_string().parse().unwrap();
+                let type_str: proc_macro2::TokenStream =
+                    rust_type.to_rust_string().parse().unwrap();
                 let docs = self.generate_docs(&field.docs);
 
                 quote! {
@@ -333,8 +341,7 @@ impl CodeGenerator {
                     return None;
                 }
                 let disc_bytes = &account.discriminator;
-                let type_name =
-                    format_ident!("{}", self.type_mapper.map_type_name(&account.name));
+                let type_name = format_ident!("{}", self.type_mapper.map_type_name(&account.name));
 
                 Some(quote! {
                     [#(#disc_bytes),*] => {
@@ -349,6 +356,13 @@ impl CodeGenerator {
                 })
             })
             .collect();
+
+        // The IDL already names every account type, so the generated decoder can
+        // describe itself the way a hand-written one does. This also uses the
+        // `DecoderCapabilities` import, which was previously emitted and never
+        // referenced -- enough on its own to fail a generated crate built with
+        // warnings denied.
+        let account_type_names: Vec<String> = idl.accounts.iter().map(|a| a.name.clone()).collect();
 
         Ok(quote! {
             /// Account decoder for #program_name.
@@ -367,6 +381,11 @@ impl CodeGenerator {
             impl DecoderIdentity for #decoder_name {
                 fn metadata(&self) -> DecoderMetadata {
                     DecoderMetadata::new(#program_name, self.program_id)
+                }
+
+                fn capabilities(&self) -> DecoderCapabilities {
+                    DecoderCapabilities::default()
+                        .with_account_types(vec![#(#account_type_names),*])
                 }
 
                 fn as_any(&self) -> &dyn Any {
@@ -429,6 +448,9 @@ impl CodeGenerator {
             })
             .collect();
 
+        let instruction_type_names: Vec<String> =
+            idl.instructions.iter().map(|i| i.name.clone()).collect();
+
         Ok(quote! {
             /// Instruction decoder for #program_name.
             #[derive(Debug, Clone)]
@@ -446,6 +468,11 @@ impl CodeGenerator {
             impl DecoderIdentity for #decoder_name {
                 fn metadata(&self) -> DecoderMetadata {
                     DecoderMetadata::new(#program_name, self.program_id)
+                }
+
+                fn capabilities(&self) -> DecoderCapabilities {
+                    DecoderCapabilities::default()
+                        .with_instruction_types(vec![#(#instruction_type_names),*])
                 }
 
                 fn as_any(&self) -> &dyn Any {
@@ -567,7 +594,10 @@ mod tests {
         let init = find_struct(&file, "InitializeInstruction")
             .expect("InitializeInstruction struct should be generated");
         assert!(has_field(init, "amount", "u64"), "expected `amount: u64`");
-        assert!(has_field(init, "owner", "Pubkey"), "expected `owner: Pubkey`");
+        assert!(
+            has_field(init, "owner", "Pubkey"),
+            "expected `owner: Pubkey`"
+        );
     }
 
     /// Locate a generated struct by name in the parsed output.

@@ -1,9 +1,7 @@
-//! Generated decoder for #program_name v#version
-//!
-//! This file was automatically generated. Do not edit manually.
+//!Generated from the Anchor IDL for marinade_finance v0.1.0. Do not edit; regenerate with the `account-decoder generate` command.
 use account_decoder_core::{
-    AccountDecoder, DecodeError, DecodeResult, DecodedEvent,
-    DecoderIdentity, DecoderMetadata, EventKind, InstructionDecoder,
+    AccountDecoder, DecodeError, DecodeResult, DecodedEvent, DecoderCapabilities, DecoderIdentity,
+    DecoderMetadata, EventKind, InstructionDecoder,
 };
 use borsh::BorshDeserialize;
 use solana_sdk::pubkey::Pubkey;
@@ -279,6 +277,9 @@ impl MarinadeFinanceAccountDecoder {
 impl DecoderIdentity for MarinadeFinanceAccountDecoder {
     fn metadata(&self) -> DecoderMetadata {
         DecoderMetadata::new("marinade_finance", self.program_id)
+    }
+    fn capabilities(&self) -> DecoderCapabilities {
+        DecoderCapabilities::default().with_account_types(vec!["TicketAccountData", "State"])
     }
     fn as_any(&self) -> &dyn Any {
         self
@@ -851,6 +852,39 @@ impl DecoderIdentity for MarinadeFinanceInstructionDecoder {
     fn metadata(&self) -> DecoderMetadata {
         DecoderMetadata::new("marinade_finance", self.program_id)
     }
+    fn capabilities(&self) -> DecoderCapabilities {
+        DecoderCapabilities::default().with_instruction_types(vec![
+            "initialize",
+            "changeAuthority",
+            "addValidator",
+            "removeValidator",
+            "setValidatorScore",
+            "configValidatorSystem",
+            "deposit",
+            "depositStakeAccount",
+            "liquidUnstake",
+            "addLiquidity",
+            "removeLiquidity",
+            "configLp",
+            "configMarinade",
+            "orderUnstake",
+            "claim",
+            "stakeReserve",
+            "updateActive",
+            "updateDeactivated",
+            "deactivateStake",
+            "emergencyUnstake",
+            "partialUnstake",
+            "mergeStakes",
+            "createCanonicalStake",
+            "pause",
+            "resume",
+            "withdrawStakeAccount",
+            "reallocValidatorList",
+            "reallocStakeList",
+            "finalizeDelinquentUpgrade",
+        ])
+    }
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -1004,9 +1038,7 @@ impl InstructionDecoder for MarinadeFinanceInstructionDecoder {
             }
             [173u8, 8u8, 90u8, 193u8, 222u8, 52u8, 169u8, 144u8] => {
                 let mut cursor = &data[8..];
-                let value = FinalizeDelinquentUpgradeInstruction::deserialize(
-                    &mut cursor,
-                )?;
+                let value = FinalizeDelinquentUpgradeInstruction::deserialize(&mut cursor)?;
                 Ok(Box::new(value))
             }
             _ => Err(DecodeError::unknown_discriminator(&discriminator)),

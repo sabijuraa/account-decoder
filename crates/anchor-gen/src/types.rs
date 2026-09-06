@@ -66,7 +66,11 @@ impl RustType {
             RustType::Primitive(p) => primitive_size(p),
             RustType::Pubkey => Some(32),
             RustType::Array(inner, size) => inner.fixed_size().map(|s| s * size),
-            RustType::Option(_) | RustType::Vec(_) | RustType::Custom(_) | RustType::String | RustType::Bytes => None,
+            RustType::Option(_)
+            | RustType::Vec(_)
+            | RustType::Custom(_)
+            | RustType::String
+            | RustType::Bytes => None,
         }
     }
 }
@@ -143,9 +147,7 @@ impl TypeMapper {
         match complex {
             IdlTypeComplex::Option(inner) => RustType::Option(Box::new(self.map(inner))),
             IdlTypeComplex::Vec(inner) => RustType::Vec(Box::new(self.map(inner))),
-            IdlTypeComplex::Array(inner, size) => {
-                RustType::Array(Box::new(self.map(inner)), *size)
-            }
+            IdlTypeComplex::Array(inner, size) => RustType::Array(Box::new(self.map(inner)), *size),
             IdlTypeComplex::Defined(defined) => {
                 let name = defined.name();
                 if let Some(override_name) = self.type_overrides.get(name) {

@@ -74,15 +74,22 @@ fn generated_decoder_decodes_the_real_account() {
         "rent exemption should be non-zero"
     );
 
-    // Reserve and liq pool bumps are single bytes; a misaligned struct would
-    // almost certainly push these out of range.
-    assert!(state.reserve_bump_seed <= 255);
+    // A u8 is always in range, so asserting that proved nothing. This is the
+    // canonical PDA bump for Marinade's reserve, and a shifted struct would
+    // read some other byte here.
+    assert_eq!(
+        state.reserve_bump_seed, 255,
+        "the reserve PDA's canonical bump"
+    );
 
     println!("decoded State from a real mainnet account:");
     println!("  msol_mint                 = {}", state.msol_mint);
     println!("  admin_authority           = {}", state.admin_authority);
     println!("  msol_price                = {}", state.msol_price);
-    println!("  rent_exempt_for_token_acc = {}", state.rent_exempt_for_token_acc);
+    println!(
+        "  rent_exempt_for_token_acc = {}",
+        state.rent_exempt_for_token_acc
+    );
     println!("  reserve_bump_seed         = {}", state.reserve_bump_seed);
 }
 
@@ -102,6 +109,9 @@ fn truncated_account_data_is_an_error_not_a_panic() {
 
     for len in [0usize, 1, 7, 8, 9, 64, 512] {
         let result = decoder.decode_account(&data[..len.min(data.len())]);
-        assert!(result.is_err(), "truncated to {len} bytes should be an error");
+        assert!(
+            result.is_err(),
+            "truncated to {len} bytes should be an error"
+        );
     }
 }

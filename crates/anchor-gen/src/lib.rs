@@ -65,5 +65,5 @@ mod idl;
 mod types;
 
 pub use codegen::{CodeGenerator, GeneratorConfig, GeneratorError};
-pub use idl::{IdlParser, IdlProgram, IdlAccount, IdlInstruction, IdlType, IdlField};
-pub use types::{TypeMapper, RustType};
+pub use idl::{IdlAccount, IdlField, IdlInstruction, IdlParser, IdlProgram, IdlType};
+pub use types::{RustType, TypeMapper};
