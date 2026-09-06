@@ -58,7 +58,7 @@ impl NonceState {
             1 => Ok(NonceState::Initialized),
             _ => Err(DecodeError::invalid_field(
                 "state",
-                format!("invalid nonce state: {}", value),
+                format!("invalid nonce state: {value}"),
             )),
         }
     }
@@ -120,25 +120,25 @@ impl SystemDecoder {
         let mut reader = ZeroCopyReader::new(data);
 
         // Version
-        let version = reader.read_u32().map_err(|e| DecodeError::deserialization(e))?;
+        let version = reader.read_u32().map_err(DecodeError::deserialization)?;
 
         // State
-        let state_value = reader.read_u32().map_err(|e| DecodeError::deserialization(e))?;
+        let state_value = reader.read_u32().map_err(DecodeError::deserialization)?;
         let state = NonceState::from_u32(state_value)?;
 
         // Authority
         let authority = Pubkey::new_from_array(
-            *reader.read_fixed::<32>().map_err(|e| DecodeError::deserialization(e))?
+            *reader.read_fixed::<32>().map_err(DecodeError::deserialization)?
         );
 
         // Nonce (blockhash)
         let nonce = Pubkey::new_from_array(
-            *reader.read_fixed::<32>().map_err(|e| DecodeError::deserialization(e))?
+            *reader.read_fixed::<32>().map_err(DecodeError::deserialization)?
         );
 
         // Fee calculator
         let fee_calculator_lamports_per_signature = reader.read_u64()
-            .map_err(|e| DecodeError::deserialization(e))?;
+            .map_err(DecodeError::deserialization)?;
 
         Ok(NonceAccount {
             version,
@@ -290,20 +290,29 @@ impl DecodedEvent for SystemInstruction {
 impl InstructionDecoder for SystemDecoder {
 
     fn decode_instruction(&self, data: &[u8]) -> DecodeResult<Box<dyn DecodedEvent>> {
+        /// Read the next 32 bytes as a pubkey.
+        fn read_pubkey(reader: &mut ZeroCopyReader<'_>) -> DecodeResult<Pubkey> {
+            Ok(Pubkey::new_from_array(
+                *reader
+                    .read_fixed::<32>()
+                    .map_err(DecodeError::deserialization)?,
+            ))
+        }
+
         if data.len() < 4 {
             return Err(DecodeError::insufficient_data(4, data.len()));
         }
 
         let mut reader = ZeroCopyReader::new(data);
-        let discriminator = reader.read_u32().map_err(|e| DecodeError::deserialization(e))?;
+        let discriminator = reader.read_u32().map_err(DecodeError::deserialization)?;
 
         let instruction = match discriminator {
             0 => {
                 // CreateAccount
-                let lamports = reader.read_u64().map_err(|e| DecodeError::deserialization(e))?;
-                let space = reader.read_u64().map_err(|e| DecodeError::deserialization(e))?;
+                let lamports = reader.read_u64().map_err(DecodeError::deserialization)?;
+                let space = reader.read_u64().map_err(DecodeError::deserialization)?;
                 let owner = Pubkey::new_from_array(
-                    *reader.read_fixed::<32>().map_err(|e| DecodeError::deserialization(e))?
+                    *reader.read_fixed::<32>().map_err(DecodeError::deserialization)?
                 );
                 SystemInstruction::CreateAccount {
                     lamports,
@@ -314,35 +323,83 @@ impl InstructionDecoder for SystemDecoder {
             1 => {
                 // Assign
                 let owner = Pubkey::new_from_array(
-                    *reader.read_fixed::<32>().map_err(|e| DecodeError::deserialization(e))?
+                    *reader.read_fixed::<32>().map_err(DecodeError::deserialization)?
                 );
                 SystemInstruction::Assign { owner }
             }
             2 => {
                 // Transfer
-                let lamports = reader.read_u64().map_err(|e| DecodeError::deserialization(e))?;
+                let lamports = reader.read_u64().map_err(DecodeError::deserialization)?;
                 SystemInstruction::Transfer { lamports }
+            }
+            3 => {
+                // CreateAccountWithSeed. The seed is a borsh String, so it is a
+                // u32 length followed by that many bytes -- everything after it
+                // is at a variable offset, which is why these four instructions
+                // cannot be read with fixed offsets like the others.
+                let base = read_pubkey(&mut reader)?;
+                let seed = reader.read_string().map_err(DecodeError::deserialization)?;
+                let lamports = reader.read_u64().map_err(DecodeError::deserialization)?;
+                let space = reader.read_u64().map_err(DecodeError::deserialization)?;
+                let owner = read_pubkey(&mut reader)?;
+                SystemInstruction::CreateAccountWithSeed {
+                    base,
+                    seed,
+                    lamports,
+                    space,
+                    owner,
+                }
             }
             4 => SystemInstruction::AdvanceNonceAccount,
             5 => {
-                let lamports = reader.read_u64().map_err(|e| DecodeError::deserialization(e))?;
+                let lamports = reader.read_u64().map_err(DecodeError::deserialization)?;
                 SystemInstruction::WithdrawNonceAccount { lamports }
             }
             6 => {
                 let authority = Pubkey::new_from_array(
-                    *reader.read_fixed::<32>().map_err(|e| DecodeError::deserialization(e))?
+                    *reader.read_fixed::<32>().map_err(DecodeError::deserialization)?
                 );
                 SystemInstruction::InitializeNonceAccount { authority }
             }
             7 => {
                 let authority = Pubkey::new_from_array(
-                    *reader.read_fixed::<32>().map_err(|e| DecodeError::deserialization(e))?
+                    *reader.read_fixed::<32>().map_err(DecodeError::deserialization)?
                 );
                 SystemInstruction::AuthorizeNonceAccount { authority }
             }
             8 => {
-                let space = reader.read_u64().map_err(|e| DecodeError::deserialization(e))?;
+                let space = reader.read_u64().map_err(DecodeError::deserialization)?;
                 SystemInstruction::Allocate { space }
+            }
+            9 => {
+                let base = read_pubkey(&mut reader)?;
+                let seed = reader.read_string().map_err(DecodeError::deserialization)?;
+                let space = reader.read_u64().map_err(DecodeError::deserialization)?;
+                let owner = read_pubkey(&mut reader)?;
+                SystemInstruction::AllocateWithSeed {
+                    base,
+                    seed,
+                    space,
+                    owner,
+                }
+            }
+            10 => {
+                let base = read_pubkey(&mut reader)?;
+                let seed = reader.read_string().map_err(DecodeError::deserialization)?;
+                let owner = read_pubkey(&mut reader)?;
+                SystemInstruction::AssignWithSeed { base, seed, owner }
+            }
+            11 => {
+                // TransferWithSeed puts the lamports first, unlike the other
+                // three; the seed describes the *source* account.
+                let lamports = reader.read_u64().map_err(DecodeError::deserialization)?;
+                let from_seed = reader.read_string().map_err(DecodeError::deserialization)?;
+                let from_owner = read_pubkey(&mut reader)?;
+                SystemInstruction::TransferWithSeed {
+                    lamports,
+                    from_seed,
+                    from_owner,
+                }
             }
             12 => SystemInstruction::UpgradeNonceAccount,
             _ => return Err(DecodeError::unknown_discriminator(&discriminator.to_le_bytes())),
@@ -356,6 +413,105 @@ impl InstructionDecoder for SystemDecoder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use borsh::BorshSerialize;
+
+    /// Encode a System instruction the way the runtime does: a u32 tag followed
+    /// by borsh-serialised fields.
+    fn encode(tag: u32, fields: &[u8]) -> Vec<u8> {
+        let mut out = tag.to_le_bytes().to_vec();
+        out.extend_from_slice(fields);
+        out
+    }
+
+    fn borsh_string(value: &str) -> Vec<u8> {
+        let mut out = Vec::new();
+        value.serialize(&mut out).expect("string serialises");
+        out
+    }
+
+    #[test]
+    fn the_with_seed_instructions_decode() {
+        // These four have a variable-length seed in the middle, so they cannot
+        // be read at fixed offsets. All four used to fall through to
+        // "unknown discriminator" despite having variants defined for them.
+        let decoder = SystemDecoder::new();
+        let base = Pubkey::new_from_array([3u8; 32]);
+        let owner = Pubkey::new_from_array([4u8; 32]);
+
+        let mut fields = base.to_bytes().to_vec();
+        fields.extend_from_slice(&borsh_string("my-seed"));
+        fields.extend_from_slice(&1_000u64.to_le_bytes());
+        fields.extend_from_slice(&165u64.to_le_bytes());
+        fields.extend_from_slice(&owner.to_bytes());
+        let event = decoder
+            .decode_instruction(&encode(3, &fields))
+            .expect("CreateAccountWithSeed decodes");
+        let decoded = event
+            .as_any()
+            .downcast_ref::<SystemInstruction>()
+            .expect("a system instruction");
+        assert_eq!(
+            decoded,
+            &SystemInstruction::CreateAccountWithSeed {
+                base,
+                seed: "my-seed".to_string(),
+                lamports: 1_000,
+                space: 165,
+                owner,
+            }
+        );
+
+        let mut fields = base.to_bytes().to_vec();
+        fields.extend_from_slice(&borsh_string("alloc"));
+        fields.extend_from_slice(&99u64.to_le_bytes());
+        fields.extend_from_slice(&owner.to_bytes());
+        let event = decoder
+            .decode_instruction(&encode(9, &fields))
+            .expect("AllocateWithSeed decodes");
+        assert_eq!(event.event_type(), "AllocateWithSeed");
+
+        let mut fields = base.to_bytes().to_vec();
+        fields.extend_from_slice(&borsh_string("assign"));
+        fields.extend_from_slice(&owner.to_bytes());
+        let event = decoder
+            .decode_instruction(&encode(10, &fields))
+            .expect("AssignWithSeed decodes");
+        assert_eq!(event.event_type(), "AssignWithSeed");
+
+        // TransferWithSeed puts lamports first, which is the detail most easily
+        // got wrong by copying the shape of the other three.
+        let mut fields = 7_500u64.to_le_bytes().to_vec();
+        fields.extend_from_slice(&borsh_string("from"));
+        fields.extend_from_slice(&owner.to_bytes());
+        let event = decoder
+            .decode_instruction(&encode(11, &fields))
+            .expect("TransferWithSeed decodes");
+        let decoded = event
+            .as_any()
+            .downcast_ref::<SystemInstruction>()
+            .expect("a system instruction");
+        assert_eq!(
+            decoded,
+            &SystemInstruction::TransferWithSeed {
+                lamports: 7_500,
+                from_seed: "from".to_string(),
+                from_owner: owner,
+            }
+        );
+    }
+
+    #[test]
+    fn a_seed_longer_than_the_buffer_is_an_error_not_a_panic() {
+        // The length prefix is attacker-controlled. Claiming a 4GB seed in a
+        // 40-byte instruction must not allocate or read out of bounds.
+        let decoder = SystemDecoder::new();
+        let mut fields = [3u8; 32].to_vec();
+        fields.extend_from_slice(&u32::MAX.to_le_bytes());
+        fields.extend_from_slice(b"short");
+
+        let result = decoder.decode_instruction(&encode(3, &fields));
+        assert!(result.is_err(), "an impossible seed length must be rejected");
+    }
     use account_decoder_core::TypedEvent;
 
     #[test]
