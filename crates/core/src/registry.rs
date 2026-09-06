@@ -23,20 +23,49 @@ use tracing::{debug, trace, warn};
 ///
 /// # Example
 ///
-/// ```rust,ignore
-/// use account_decoder_core::{DecoderRegistry, AccountDecoder};
-///
+/// ```rust
+/// # use account_decoder_core::{
+/// #     AccountDecoder, DecodeError, DecodeResult, DecodedEvent, DecoderIdentity,
+/// #     DecoderMetadata, DecoderRegistry, EventKind,
+/// # };
+/// # use solana_sdk::pubkey::Pubkey;
+/// # use std::any::Any;
+/// # const PROGRAM: Pubkey = Pubkey::new_from_array([4u8; 32]);
+/// # #[derive(Debug)]
+/// # struct Value(u64);
+/// # impl DecodedEvent for Value {
+/// #     fn event_kind(&self) -> EventKind { EventKind::Account }
+/// #     fn event_type(&self) -> &'static str { "Value" }
+/// #     fn program_name(&self) -> &'static str { "example" }
+/// #     fn as_any(&self) -> &dyn Any { self }
+/// # }
+/// # #[derive(Debug)]
+/// # struct Example;
+/// # impl DecoderIdentity for Example {
+/// #     fn metadata(&self) -> DecoderMetadata { DecoderMetadata::new("example", PROGRAM) }
+/// #     fn as_any(&self) -> &dyn Any { self }
+/// # }
+/// # impl AccountDecoder for Example {
+/// #     fn decode_account(&self, data: &[u8]) -> DecodeResult<Box<dyn DecodedEvent>> {
+/// #         let b: [u8; 8] = data.get(..8).and_then(|b| b.try_into().ok())
+/// #             .ok_or_else(|| DecodeError::insufficient_data(8, data.len()))?;
+/// #         Ok(Box::new(Value(u64::from_le_bytes(b))))
+/// #     }
+/// # }
 /// let mut registry = DecoderRegistry::new();
+/// registry.register_account(Box::new(Example));
 ///
-/// // Register decoders
-/// registry.register_account(Box::new(TokenDecoder::new()));
-/// registry.register_account(Box::new(SystemDecoder::new()));
+/// // Dispatch by program id: the registry knows which decoder owns the bytes.
+/// let event = registry.decode_account(&PROGRAM, &7u64.to_le_bytes()).unwrap();
+/// assert_eq!(event.event_type(), "Value");
 ///
-/// // Look up and use a decoder
-/// let program_id = spl_token::id();
-/// if let Some(decoder) = registry.get_account(&program_id) {
-///     let event = decoder.decode_account(&account_data)?;
-/// }
+/// // Or take the decoder itself, when you are decoding many accounts at once.
+/// let decoder = registry.get_account(&PROGRAM).expect("registered");
+/// assert!(decoder.decode_account(&1u64.to_le_bytes()).is_ok());
+///
+/// // A program that was never registered is reported, not guessed at.
+/// let unknown = Pubkey::new_from_array([255u8; 32]);
+/// assert!(registry.decode_account(&unknown, &[0u8; 8]).is_err());
 /// ```
 #[derive(Default)]
 pub struct DecoderRegistry {
@@ -248,12 +277,40 @@ impl std::fmt::Debug for DecoderRegistry {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust
+/// # use account_decoder_core::{
+/// #     AccountDecoder, DecodeResult, DecodedEvent, DecoderIdentity, DecoderMetadata,
+/// #     EventKind, RegistryBuilder,
+/// # };
+/// # use solana_sdk::pubkey::Pubkey;
+/// # use std::any::Any;
+/// # const PROGRAM: Pubkey = Pubkey::new_from_array([6u8; 32]);
+/// # #[derive(Debug)]
+/// # struct Nothing;
+/// # impl DecodedEvent for Nothing {
+/// #     fn event_kind(&self) -> EventKind { EventKind::Account }
+/// #     fn event_type(&self) -> &'static str { "Nothing" }
+/// #     fn program_name(&self) -> &'static str { "example" }
+/// #     fn as_any(&self) -> &dyn Any { self }
+/// # }
+/// # #[derive(Debug)]
+/// # struct Example;
+/// # impl DecoderIdentity for Example {
+/// #     fn metadata(&self) -> DecoderMetadata { DecoderMetadata::new("example", PROGRAM) }
+/// #     fn as_any(&self) -> &dyn Any { self }
+/// # }
+/// # impl AccountDecoder for Example {
+/// #     fn decode_account(&self, _data: &[u8]) -> DecodeResult<Box<dyn DecodedEvent>> {
+/// #         Ok(Box::new(Nothing))
+/// #     }
+/// # }
 /// let registry = RegistryBuilder::new()
-///     .with_account(TokenDecoder::new())
-///     .with_account(SystemDecoder::new())
+///     .with_account(Example)
 ///     .with_warnings(true)
 ///     .build();
+///
+/// assert_eq!(registry.account_decoder_count(), 1);
+/// assert!(registry.has_account_decoder(&PROGRAM));
 /// ```
 #[derive(Default)]
 pub struct RegistryBuilder {

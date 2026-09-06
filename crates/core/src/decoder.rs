@@ -141,38 +141,64 @@ pub trait DecoderIdentity: Send + Sync + Debug {
 ///
 /// # Implementing a Decoder
 ///
-/// ```rust,ignore
+/// ```rust
 /// use account_decoder_core::{
-///     AccountDecoder, DecodeError, DecodeResult, DecodedEvent, DecoderIdentity, DecoderMetadata,
+///     AccountDecoder, DecodeError, DecodeResult, DecodedEvent, DecoderIdentity,
+///     DecoderMetadata, EventKind,
 /// };
+/// use solana_sdk::pubkey::Pubkey;
 /// use std::any::Any;
+///
+/// const MY_PROGRAM: Pubkey = Pubkey::new_from_array([5u8; 32]);
+///
+/// #[derive(Debug)]
+/// struct StateV1 { value: u64 }
+///
+/// impl DecodedEvent for StateV1 {
+///     fn event_kind(&self) -> EventKind { EventKind::Account }
+///     fn event_type(&self) -> &'static str { "StateV1" }
+///     fn program_name(&self) -> &'static str { "my-program" }
+///     fn as_any(&self) -> &dyn Any { self }
+/// }
 ///
 /// #[derive(Debug)]
 /// struct MyProgramDecoder;
 ///
 /// impl DecoderIdentity for MyProgramDecoder {
 ///     fn metadata(&self) -> DecoderMetadata {
-///         DecoderMetadata::new("MyProgram", my_program::ID)
+///         DecoderMetadata::new("my-program", MY_PROGRAM)
 ///     }
-///
-///     fn as_any(&self) -> &dyn Any {
-///         self
-///     }
+///     fn as_any(&self) -> &dyn Any { self }
 /// }
 ///
 /// impl AccountDecoder for MyProgramDecoder {
 ///     fn decode_account(&self, data: &[u8]) -> DecodeResult<Box<dyn DecodedEvent>> {
-///         let discriminator = data.first().ok_or(DecodeError::InsufficientData {
-///             needed: 1,
-///             available: 0,
-///         })?;
-///         match discriminator {
-///             0 => self.decode_state_v1(data),
-///             1 => self.decode_state_v2(data),
-///             other => Err(DecodeError::UnknownDiscriminator(vec![*other])),
+///         // A one-byte tag chooses the layout, then the fields follow.
+///         let tag = *data.first()
+///             .ok_or_else(|| DecodeError::insufficient_data(1, 0))?;
+///
+///         match tag {
+///             0 => {
+///                 let bytes: [u8; 8] = data.get(1..9)
+///                     .and_then(|b| b.try_into().ok())
+///                     .ok_or_else(|| DecodeError::insufficient_data(9, data.len()))?;
+///                 Ok(Box::new(StateV1 { value: u64::from_le_bytes(bytes) }))
+///             }
+///             other => Err(DecodeError::UnknownDiscriminator(vec![other])),
 ///         }
 ///     }
 /// }
+///
+/// let decoder = MyProgramDecoder;
+/// let mut data = vec![0u8];
+/// data.extend_from_slice(&77u64.to_le_bytes());
+///
+/// let event = decoder.decode_account(&data).unwrap();
+/// assert_eq!(event.event_type(), "StateV1");
+///
+/// // An unrecognised tag and a truncated buffer are both clean errors.
+/// assert!(decoder.decode_account(&[9u8; 9]).is_err());
+/// assert!(decoder.decode_account(&[]).is_err());
 /// ```
 pub trait AccountDecoder: DecoderIdentity {
     /// Decode raw account data into a structured event.

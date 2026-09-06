@@ -10,13 +10,29 @@
 //!
 //! ## Usage
 //!
-//! ```rust,ignore
-//! use account_decoder_decoders::{TokenDecoder, SystemDecoder};
-//! use account_decoder_core::DecoderRegistry;
+//! ```rust
+//! use account_decoder_core::{AccountDecoder, TypedEvent};
+//! use account_decoder_decoders::{Mint, TokenDecoder};
 //!
-//! let mut registry = DecoderRegistry::new();
-//! registry.register_account(Box::new(TokenDecoder::new()));
-//! registry.register_account(Box::new(SystemDecoder::new()));
+//! // An SPL mint: 82 bytes, with both authorities present.
+//! let mut data = Vec::new();
+//! data.extend_from_slice(&1u32.to_le_bytes());  // COption::Some
+//! data.extend_from_slice(&[1u8; 32]);            // mint authority
+//! data.extend_from_slice(&1_000_000u64.to_le_bytes()); // supply
+//! data.push(6);                                   // decimals
+//! data.push(1);                                   // initialized
+//! data.extend_from_slice(&0u32.to_le_bytes());   // COption::None
+//! data.extend_from_slice(&[0u8; 32]);
+//!
+//! let event = TokenDecoder::new().decode_account(&data)?;
+//! let mint = event.downcast_ref::<Mint>().expect("a mint");
+//! assert_eq!(mint.decimals, 6);
+//! assert_eq!(mint.supply, 1_000_000);
+//! assert!(mint.freeze_authority.is_none());
+//!
+//! // Sizes are the only type tag SPL Token has, so anything else is refused.
+//! assert!(TokenDecoder::new().decode_account(&[0u8; 100]).is_err());
+//! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
 mod system;

@@ -25,20 +25,39 @@
 //!
 //! ## Example
 //!
-//! ```rust,ignore
-//! use account_decoder_anchor_gen::{IdlParser, CodeGenerator, GeneratorConfig};
+//! ```rust
+//! use account_decoder_anchor_gen::{CodeGenerator, GeneratorConfig, IdlParser};
 //!
-//! // Parse an IDL file
-//! let idl_json = std::fs::read_to_string("target/idl/my_program.json")?;
-//! let idl = IdlParser::parse(&idl_json)?;
+//! // A minimal IDL: one account type with two fields.
+//! let idl_json = r#"{
+//!   "version": "0.1.0",
+//!   "name": "counter",
+//!   "instructions": [],
+//!   "accounts": [{
+//!     "name": "Counter",
+//!     "type": { "kind": "struct", "fields": [
+//!       { "name": "authority", "type": "publicKey" },
+//!       { "name": "count", "type": "u64" }
+//!     ]}
+//!   }]
+//! }"#;
 //!
-//! // Generate decoder code
-//! let config = GeneratorConfig::default();
-//! let generator = CodeGenerator::new(config);
-//! let code = generator.generate(&idl)?;
+//! let idl = IdlParser::parse(idl_json)?;
+//! assert_eq!(idl.name, "counter");
 //!
-//! // Write to a file
-//! std::fs::write("src/generated/my_program.rs", code.to_string())?;
+//! let code = CodeGenerator::new(GeneratorConfig::default())
+//!     .generate(&idl)?
+//!     .to_string();
+//!
+//! // The output is real Rust: a struct for the account and a decoder that
+//! // dispatches on Anchor's discriminator.
+//! assert!(code.contains("Counter"));
+//! assert!(code.contains("AccountDecoder"));
+//!
+//! // And it parses as Rust, which is the check that matters -- a generator
+//! // that emitted something almost-valid would pass a string comparison.
+//! syn::parse_file(&code).expect("generated code is valid Rust");
+//! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
 mod codegen;

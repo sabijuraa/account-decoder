@@ -19,18 +19,28 @@
 //!
 //! ## Example
 //!
-//! ```rust,ignore
-//! use account_decoder_borsh_util::{ZeroCopyReader, read_discriminator};
+//! ```rust
+//! use account_decoder_borsh_util::{read_discriminator, AnchorDiscriminator, ZeroCopyReader};
 //!
-//! let data: &[u8] = /* account data */;
+//! // An Anchor account: eight discriminator bytes, then the fields.
+//! let expected = AnchorDiscriminator::account("State");
+//! let mut data = expected.as_bytes().to_vec();
+//! data.extend_from_slice(&7_500u64.to_le_bytes());
+//! data.extend_from_slice(&[3u8; 32]);
 //!
-//! // Quick discriminator check without full deserialization
-//! let discriminator = read_discriminator::<8>(data)?;
+//! // Check the type before doing any parsing work.
+//! let discriminator = read_discriminator::<8>(&data)?;
+//! assert_eq!(discriminator.as_bytes(), expected.as_bytes());
 //!
-//! // Zero-copy field access
-//! let mut reader = ZeroCopyReader::new(data);
-//! let amount: u64 = reader.read_u64()?;
+//! // Then read fields without copying the buffer.
+//! let mut reader = ZeroCopyReader::new(&data[8..]);
+//! assert_eq!(reader.read_u64()?, 7_500);
 //! let owner: &[u8; 32] = reader.read_fixed()?;
+//! assert_eq!(owner, &[3u8; 32]);
+//!
+//! // Reading past the end is an error, never a panic.
+//! assert!(reader.read_u64().is_err());
+//! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
 mod discriminator;

@@ -24,22 +24,57 @@
 //!
 //! ## Example
 //!
-//! ```rust,ignore
-//! use account_decoder_core::{DecoderRegistry, AccountDecoder, DecodedEvent};
+//! ```rust
+//! use account_decoder_core::{
+//!     AccountDecoder, DecodeError, DecodeResult, DecodedEvent, DecoderIdentity,
+//!     DecoderMetadata, DecoderRegistry, EventKind, TypedEvent,
+//! };
 //! use solana_sdk::pubkey::Pubkey;
+//! use std::any::Any;
 //!
-//! // Create a registry and register decoders
-//! let mut registry = DecoderRegistry::new();
-//! registry.register(TokenDecoder::new());
+//! const PROGRAM: Pubkey = Pubkey::new_from_array([1u8; 32]);
 //!
-//! // Decode an account
-//! let program_id = spl_token::id();
-//! let account_data: &[u8] = /* ... */;
+//! #[derive(Debug)]
+//! struct Balance(u64);
 //!
-//! if let Some(decoder) = registry.get(&program_id) {
-//!     let event = decoder.decode_account(account_data)?;
-//!     // Handle the decoded event
+//! impl DecodedEvent for Balance {
+//!     fn event_kind(&self) -> EventKind { EventKind::Account }
+//!     fn event_type(&self) -> &'static str { "Balance" }
+//!     fn program_name(&self) -> &'static str { "example" }
+//!     fn as_any(&self) -> &dyn Any { self }
 //! }
+//!
+//! #[derive(Debug)]
+//! struct Example;
+//!
+//! impl DecoderIdentity for Example {
+//!     fn metadata(&self) -> DecoderMetadata { DecoderMetadata::new("example", PROGRAM) }
+//!     fn as_any(&self) -> &dyn Any { self }
+//! }
+//!
+//! impl AccountDecoder for Example {
+//!     fn decode_account(&self, data: &[u8]) -> DecodeResult<Box<dyn DecodedEvent>> {
+//!         let bytes: [u8; 8] = data.get(..8)
+//!             .and_then(|b| b.try_into().ok())
+//!             .ok_or_else(|| DecodeError::insufficient_data(8, data.len()))?;
+//!         Ok(Box::new(Balance(u64::from_le_bytes(bytes))))
+//!     }
+//!     fn can_decode(&self, data: &[u8]) -> bool { data.len() == 8 }
+//! }
+//!
+//! let mut registry = DecoderRegistry::new();
+//! registry.register_account(Box::new(Example));
+//!
+//! let event = registry.decode_account(&PROGRAM, &99u64.to_le_bytes())?;
+//! assert_eq!(event.downcast_ref::<Balance>().unwrap().0, 99);
+//!
+//! // A program nobody registered is a clean error, not a panic.
+//! let unknown = Pubkey::new_from_array([2u8; 32]);
+//! assert!(matches!(
+//!     registry.decode_account(&unknown, &[0u8; 8]),
+//!     Err(DecodeError::UnknownProgram(_))
+//! ));
+//! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
 mod decoder;

@@ -34,33 +34,29 @@ impl fmt::Display for EventKind {
 ///
 /// # Implementing
 ///
-/// ```rust,ignore
-/// use account_decoder_core::{DecodedEvent, EventKind};
+/// ```rust
+/// use account_decoder_core::{DecodedEvent, EventKind, TypedEvent};
+/// use std::any::Any;
 ///
 /// #[derive(Debug)]
 /// struct TokenMint {
-///     pub supply: u64,
-///     pub decimals: u8,
-///     // ... other fields
+///     supply: u64,
+///     decimals: u8,
 /// }
 ///
 /// impl DecodedEvent for TokenMint {
-///     fn event_kind(&self) -> EventKind {
-///         EventKind::Account
-///     }
-///
-///     fn event_type(&self) -> &'static str {
-///         "TokenMint"
-///     }
-///
-///     fn program_name(&self) -> &'static str {
-///         "spl-token"
-///     }
-///
-///     fn as_any(&self) -> &dyn Any {
-///         self
-///     }
+///     fn event_kind(&self) -> EventKind { EventKind::Account }
+///     fn event_type(&self) -> &'static str { "TokenMint" }
+///     fn program_name(&self) -> &'static str { "spl-token" }
+///     fn as_any(&self) -> &dyn Any { self }
 /// }
+///
+/// // Once boxed, the concrete type is recovered by downcasting.
+/// let event: Box<dyn DecodedEvent> = Box::new(TokenMint { supply: 100, decimals: 6 });
+/// assert_eq!(event.event_type(), "TokenMint");
+///
+/// let mint = event.downcast_ref::<TokenMint>().expect("it is a TokenMint");
+/// assert_eq!(mint.decimals, 6);
 /// ```
 pub trait DecodedEvent: Debug + Send + Sync {
     /// Returns whether this is an account or instruction event.
@@ -80,12 +76,22 @@ pub trait DecodedEvent: Debug + Send + Sync {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
-    /// let event: Box<dyn DecodedEvent> = decoder.decode_account(data)?;
+    /// ```rust
+    /// # use account_decoder_core::{DecodedEvent, EventKind, TypedEvent};
+    /// # use std::any::Any;
+    /// # #[derive(Debug)]
+    /// # struct Mint { decimals: u8 }
+    /// # impl DecodedEvent for Mint {
+    /// #     fn event_kind(&self) -> EventKind { EventKind::Account }
+    /// #     fn event_type(&self) -> &'static str { "Mint" }
+    /// #     fn program_name(&self) -> &'static str { "spl-token" }
+    /// #     fn as_any(&self) -> &dyn Any { self }
+    /// # }
+    /// let event: Box<dyn DecodedEvent> = Box::new(Mint { decimals: 9 });
     ///
-    /// if let Some(mint) = event.as_any().downcast_ref::<TokenMint>() {
-    ///     println!("Supply: {}", mint.supply);
-    /// }
+    /// // The right type comes back; the wrong one is None rather than a panic.
+    /// assert_eq!(event.downcast_ref::<Mint>().map(|m| m.decimals), Some(9));
+    /// assert!(event.downcast_ref::<String>().is_none());
     /// ```
     fn as_any(&self) -> &dyn Any;
 

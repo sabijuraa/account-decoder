@@ -7,31 +7,27 @@
 //!
 //! ## Quick Start
 //!
-//! ```rust,ignore
+//! ```rust
 //! use account_decoder_sdk::prelude::*;
+//! use account_decoder_sdk::{default_registry, program_ids::TOKEN_PROGRAM_ID, TokenAccount};
 //!
-//! // Create a registry with built-in decoders
 //! let registry = default_registry();
 //!
-//! // Decode an account
-//! let program_id = TOKEN_PROGRAM_ID;
-//! let account_data: &[u8] = /* raw account data */;
+//! // A 165-byte SPL token account, as it comes off the chain.
+//! let mut account_data = vec![0u8; 165];
+//! account_data[64..72].copy_from_slice(&1_500_000u64.to_le_bytes()); // amount
+//! account_data[108] = 1; // state: initialized
 //!
-//! match registry.decode_account(&program_id, account_data) {
+//! match registry.decode_account(&TOKEN_PROGRAM_ID, &account_data) {
 //!     Ok(event) => {
-//!         println!("Decoded: {} - {}", event.program_name(), event.event_type());
+//!         println!("{} - {}", event.program_name(), event.event_type());
 //!
-//!         // Downcast to specific type if needed
+//!         // Recover the concrete type when you need its fields.
 //!         if let Some(token) = event.downcast_ref::<TokenAccount>() {
-//!             println!("Balance: {}", token.amount);
+//!             assert_eq!(token.amount, 1_500_000);
 //!         }
 //!     }
-//!     Err(DecodeError::UnknownProgram(_)) => {
-//!         println!("No decoder for this program");
-//!     }
-//!     Err(e) => {
-//!         println!("Decode error: {}", e);
-//!     }
+//!     Err(e) => println!("could not decode: {e}"),
 //! }
 //! ```
 //!
@@ -43,35 +39,73 @@
 //!
 //! ## Custom Decoders
 //!
-//! Implement `AccountDecoder` or `InstructionDecoder` to add support for new programs:
+//! Supporting a new program means implementing two traits and registering the
+//! result. Nothing in `core` changes.
 //!
-//! ```rust,ignore
+//! ```rust
 //! use account_decoder_sdk::prelude::*;
+//! use account_decoder_sdk::{empty_registry, DecoderMetadata, EventKind, Pubkey};
+//! use std::any::Any;
+//!
+//! const MY_PROGRAM_ID: Pubkey = Pubkey::new_from_array([9u8; 32]);
+//!
+//! /// What this program's accounts mean once decoded.
+//! #[derive(Debug)]
+//! struct Counter {
+//!     count: u64,
+//! }
+//!
+//! impl DecodedEvent for Counter {
+//!     fn event_kind(&self) -> EventKind { EventKind::Account }
+//!     fn event_type(&self) -> &'static str { "Counter" }
+//!     fn program_name(&self) -> &'static str { "my-program" }
+//!     fn as_any(&self) -> &dyn Any { self }
+//! }
 //!
 //! #[derive(Debug)]
 //! struct MyProgramDecoder;
 //!
-//! impl AccountDecoder for MyProgramDecoder {
+//! // Identity is separate from decoding, so a decoder can describe itself
+//! // before it is asked to do any work.
+//! impl DecoderIdentity for MyProgramDecoder {
 //!     fn metadata(&self) -> DecoderMetadata {
 //!         DecoderMetadata::new("my-program", MY_PROGRAM_ID)
 //!     }
+//!     fn as_any(&self) -> &dyn Any { self }
+//! }
 //!
+//! impl AccountDecoder for MyProgramDecoder {
 //!     fn decode_account(&self, data: &[u8]) -> DecodeResult<Box<dyn DecodedEvent>> {
-//!         // Parse the data and return a DecodedEvent
-//!         todo!()
+//!         let bytes: [u8; 8] = data
+//!             .get(..8)
+//!             .and_then(|b| b.try_into().ok())
+//!             .ok_or_else(|| DecodeError::insufficient_data(8, data.len()))?;
+//!         Ok(Box::new(Counter { count: u64::from_le_bytes(bytes) }))
 //!     }
 //!
-//!     fn as_any(&self) -> &dyn std::any::Any {
-//!         self
+//!     fn can_decode(&self, data: &[u8]) -> bool {
+//!         data.len() == 8
 //!     }
 //! }
+//!
+//! let mut registry = empty_registry();
+//! registry.register_account(Box::new(MyProgramDecoder));
+//!
+//! let event = registry
+//!     .decode_account(&MY_PROGRAM_ID, &42u64.to_le_bytes())
+//!     .expect("the counter decodes");
+//! assert_eq!(event.downcast_ref::<Counter>().unwrap().count, 42);
+//!
+//! // Truncated data is an error, not a panic.
+//! assert!(registry.decode_account(&MY_PROGRAM_ID, &[1, 2, 3]).is_err());
 //! ```
 
 // Re-export core types
 pub use account_decoder_core::{
-    AccountDecoder, DecodeError, DecodeResult, DecodedEvent, DecoderCapabilities,
-    DecoderInfo, DecoderMetadata, EventKind, InstructionDecoder, DecoderRegistry,
-    RegistryBuilder, TypedEvent,
+    AccountDecoder, ContextualEvent, DecodeError, DecodeResult, DecodedEvent,
+    DecoderCapabilities, DecoderIdentity, DecoderInfo, DecoderMetadata, DecoderRegistry,
+    EventKind, InstructionDecoder, PartialEvent, ProgramDecoder, RegistryBuilder,
+    TypedEvent,
 };
 
 // Re-export borsh utilities
@@ -97,16 +131,27 @@ pub use account_decoder_anchor_gen::{
 // Re-export solana types
 pub use solana_sdk::pubkey::Pubkey;
 
-/// Prelude module for convenient imports.
+/// Everything needed to decode, and to write a decoder.
 ///
-/// ```rust,ignore
+/// `DecoderIdentity` belongs here as much as `AccountDecoder` does: it is a
+/// supertrait of both decoder traits, so a caller who imported only the prelude
+/// could not implement one without it.
+///
+/// ```rust
 /// use account_decoder_sdk::prelude::*;
+///
+/// // The traits, error types and helpers are all in scope.
+/// let registry = DecoderRegistry::new();
+/// assert_eq!(registry.account_decoder_count(), 0);
+///
+/// let mut reader = ZeroCopyReader::new(&[1, 0, 0, 0, 0, 0, 0, 0]);
+/// assert_eq!(reader.read_u64().unwrap(), 1);
 /// ```
 pub mod prelude {
     pub use crate::{
         AccountDecoder, DecodeError, DecodeResult, DecodedEvent, DecoderCapabilities,
-        DecoderInfo, DecoderMetadata, DecoderRegistry, EventKind, InstructionDecoder,
-        RegistryBuilder, TypedEvent,
+        DecoderIdentity, DecoderInfo, DecoderMetadata, DecoderRegistry, EventKind,
+        InstructionDecoder, RegistryBuilder, TypedEvent,
     };
 
     pub use crate::{
@@ -130,14 +175,20 @@ pub mod prelude {
 ///
 /// This is the quickest way to get started with common Solana programs.
 ///
-/// ```rust,ignore
+/// ```rust
 /// use account_decoder_sdk::default_registry;
+/// use account_decoder_sdk::program_ids::{SYSTEM_PROGRAM_ID, TOKEN_PROGRAM_ID};
 ///
 /// let registry = default_registry();
-/// // Registry now contains decoders for:
-/// // - SPL Token
-/// // - SPL Token-2022
-/// // - System Program
+///
+/// // SPL Token, Token-2022, System and Raydium AMM v4 are all registered.
+/// assert!(registry.has_account_decoder(&TOKEN_PROGRAM_ID));
+/// assert!(registry.has_account_decoder(&SYSTEM_PROGRAM_ID));
+/// assert!(registry.account_decoder_count() >= 4);
+///
+/// for info in registry.list_account_decoders() {
+///     println!("{} -> {}", info.metadata.program_name, info.metadata.program_id);
+/// }
 /// ```
 #[cfg(feature = "builtin-decoders")]
 pub fn default_registry() -> DecoderRegistry {
@@ -171,13 +222,18 @@ pub fn empty_registry() -> DecoderRegistry {
 
 /// Builder for creating customized registries.
 ///
-/// ```rust,ignore
+/// ```rust
 /// use account_decoder_sdk::{registry_builder, TokenDecoder};
+/// use account_decoder_sdk::program_ids::TOKEN_PROGRAM_ID;
 ///
+/// // Start empty and add only what this service actually decodes: an indexer
+/// // that never sees Token-2022 should not pay to try it on every account.
 /// let registry = registry_builder()
 ///     .with_account(TokenDecoder::new())
-///     .with_warnings(true)
 ///     .build();
+///
+/// assert_eq!(registry.account_decoder_count(), 1);
+/// assert!(registry.has_account_decoder(&TOKEN_PROGRAM_ID));
 /// ```
 pub fn registry_builder() -> RegistryBuilder {
     RegistryBuilder::new()
