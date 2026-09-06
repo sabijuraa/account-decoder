@@ -109,9 +109,11 @@ Discriminators are `sha256("<namespace>:<name>")[..8]`, computed in exactly one
 place — `AnchorDiscriminator::compute` in `borsh-util`, whose tests pin real
 on-chain values (Marinade's `State` account and `deposit` instruction).
 
-IDL type mapping: `u8`–`u128`/`i8`–`i128`/`bool`/`string` map to their Rust
-equivalents, `publicKey` to `Pubkey`, `bytes` to `Vec<u8>`, and `option`,
-`vec`, `array` and `defined` map structurally.
+IDL type mapping: the `u8`–`u128`, `i8`–`i128`, `f32`/`f64`, `bool` and `string`
+scalars map to their Rust equivalents, `publicKey` (and `pubkey`) to `Pubkey`,
+`bytes` to `Vec<u8>`, and `option`, `vec`, `array` and `defined` map
+structurally. Field names are converted to snake_case and escaped with `r#` if
+they collide with a Rust keyword.
 
 Marinade Finance ships as a generated decoder, which is the evidence the
 pipeline produces something that runs rather than something that compiles.

@@ -16,9 +16,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # rust-toolchain.toml pins the version; this action honours it. The
-      # previous workflow named `dtolnay/rust-action`, which does not exist, so
-      # every job failed at its first step.
+      # rust-toolchain.toml pins the version and this action honours it, so CI
+      # and a local checkout compile with the same compiler.
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
