@@ -6,7 +6,6 @@ use account_decoder_borsh_util::ZeroCopyReader;
 use account_decoder_core::{
     AccountDecoder, DecodeError, DecodeResult, DecodedEvent, DecoderCapabilities, DecoderIdentity, DecoderMetadata, EventKind, InstructionDecoder,
 };
-use borsh::BorshDeserialize;
 use solana_sdk::pubkey::Pubkey;
 use std::any::Any;
 
@@ -153,7 +152,7 @@ impl AccountState {
             2 => Ok(AccountState::Frozen),
             _ => Err(DecodeError::invalid_field(
                 "state",
-                format!("invalid account state: {}", value),
+                format!("invalid account state: {value}"),
             )),
         }
     }
@@ -181,13 +180,13 @@ impl TokenDecoder {
         let mint_authority = Self::read_coption_pubkey(&mut reader)?;
 
         // supply: u64
-        let supply = reader.read_u64().map_err(|e| DecodeError::deserialization(e))?;
+        let supply = reader.read_u64().map_err(DecodeError::deserialization)?;
 
         // decimals: u8
-        let decimals = reader.read_u8().map_err(|e| DecodeError::deserialization(e))?;
+        let decimals = reader.read_u8().map_err(DecodeError::deserialization)?;
 
         // is_initialized: bool
-        let is_initialized = reader.read_bool().map_err(|e| DecodeError::deserialization(e))?;
+        let is_initialized = reader.read_bool().map_err(DecodeError::deserialization)?;
 
         // freeze_authority: COption<Pubkey>
         let freeze_authority = Self::read_coption_pubkey(&mut reader)?;
@@ -211,27 +210,27 @@ impl TokenDecoder {
 
         // mint: Pubkey (32 bytes)
         let mint = Pubkey::new_from_array(*reader.read_fixed::<32>()
-            .map_err(|e| DecodeError::deserialization(e))?);
+            .map_err(DecodeError::deserialization)?);
 
         // owner: Pubkey (32 bytes)
         let owner = Pubkey::new_from_array(*reader.read_fixed::<32>()
-            .map_err(|e| DecodeError::deserialization(e))?);
+            .map_err(DecodeError::deserialization)?);
 
         // amount: u64
-        let amount = reader.read_u64().map_err(|e| DecodeError::deserialization(e))?;
+        let amount = reader.read_u64().map_err(DecodeError::deserialization)?;
 
         // delegate: COption<Pubkey>
         let delegate = Self::read_coption_pubkey(&mut reader)?;
 
         // state: u8
-        let state_byte = reader.read_u8().map_err(|e| DecodeError::deserialization(e))?;
+        let state_byte = reader.read_u8().map_err(DecodeError::deserialization)?;
         let state = AccountState::from_u8(state_byte)?;
 
         // is_native: COption<u64>
         let is_native = Self::read_coption_u64(&mut reader)?;
 
         // delegated_amount: u64
-        let delegated_amount = reader.read_u64().map_err(|e| DecodeError::deserialization(e))?;
+        let delegated_amount = reader.read_u64().map_err(DecodeError::deserialization)?;
 
         // close_authority: COption<Pubkey>
         let close_authority = Self::read_coption_pubkey(&mut reader)?;
@@ -256,15 +255,15 @@ impl TokenDecoder {
 
         let mut reader = ZeroCopyReader::new(data);
 
-        let m = reader.read_u8().map_err(|e| DecodeError::deserialization(e))?;
-        let n = reader.read_u8().map_err(|e| DecodeError::deserialization(e))?;
-        let is_initialized = reader.read_bool().map_err(|e| DecodeError::deserialization(e))?;
+        let m = reader.read_u8().map_err(DecodeError::deserialization)?;
+        let n = reader.read_u8().map_err(DecodeError::deserialization)?;
+        let is_initialized = reader.read_bool().map_err(DecodeError::deserialization)?;
 
         // Read up to 11 signers
         let mut signers = Vec::with_capacity(n as usize);
         for _ in 0..11 {
             let pubkey_bytes = reader.read_fixed::<32>()
-                .map_err(|e| DecodeError::deserialization(e))?;
+                .map_err(DecodeError::deserialization)?;
             let pubkey = Pubkey::new_from_array(*pubkey_bytes);
             if pubkey != Pubkey::default() {
                 signers.push(pubkey);
@@ -281,9 +280,9 @@ impl TokenDecoder {
 
     /// Read a COption<Pubkey> (Solana's Option representation).
     fn read_coption_pubkey(reader: &mut ZeroCopyReader) -> DecodeResult<Option<Pubkey>> {
-        let tag = reader.read_u32().map_err(|e| DecodeError::deserialization(e))?;
+        let tag = reader.read_u32().map_err(DecodeError::deserialization)?;
         let pubkey_bytes = reader.read_fixed::<32>()
-            .map_err(|e| DecodeError::deserialization(e))?;
+            .map_err(DecodeError::deserialization)?;
 
         Ok(if tag == 0 {
             None
@@ -294,8 +293,8 @@ impl TokenDecoder {
 
     /// Read a COption<u64>.
     fn read_coption_u64(reader: &mut ZeroCopyReader) -> DecodeResult<Option<u64>> {
-        let tag = reader.read_u32().map_err(|e| DecodeError::deserialization(e))?;
-        let value = reader.read_u64().map_err(|e| DecodeError::deserialization(e))?;
+        let tag = reader.read_u32().map_err(DecodeError::deserialization)?;
+        let value = reader.read_u64().map_err(DecodeError::deserialization)?;
 
         Ok(if tag == 0 { None } else { Some(value) })
     }
@@ -443,14 +442,14 @@ impl InstructionDecoder for TokenDecoder {
         }
 
         let mut reader = ZeroCopyReader::new(data);
-        let discriminator = reader.read_u8().map_err(|e| DecodeError::deserialization(e))?;
+        let discriminator = reader.read_u8().map_err(DecodeError::deserialization)?;
 
         let instruction = match discriminator {
             0 => {
                 // InitializeMint
-                let decimals = reader.read_u8().map_err(|e| DecodeError::deserialization(e))?;
+                let decimals = reader.read_u8().map_err(DecodeError::deserialization)?;
                 let mint_authority = Pubkey::new_from_array(
-                    *reader.read_fixed::<32>().map_err(|e| DecodeError::deserialization(e))?
+                    *reader.read_fixed::<32>().map_err(DecodeError::deserialization)?
                 );
                 let freeze_authority = Self::read_coption_pubkey(&mut reader)?;
 
@@ -462,20 +461,20 @@ impl InstructionDecoder for TokenDecoder {
             }
             1 => TokenInstruction::InitializeAccount,
             2 => {
-                let m = reader.read_u8().map_err(|e| DecodeError::deserialization(e))?;
+                let m = reader.read_u8().map_err(DecodeError::deserialization)?;
                 TokenInstruction::InitializeMultisig { m }
             }
             3 => {
-                let amount = reader.read_u64().map_err(|e| DecodeError::deserialization(e))?;
+                let amount = reader.read_u64().map_err(DecodeError::deserialization)?;
                 TokenInstruction::Transfer { amount }
             }
             4 => {
-                let amount = reader.read_u64().map_err(|e| DecodeError::deserialization(e))?;
+                let amount = reader.read_u64().map_err(DecodeError::deserialization)?;
                 TokenInstruction::Approve { amount }
             }
             5 => TokenInstruction::Revoke,
             6 => {
-                let authority_type = reader.read_u8().map_err(|e| DecodeError::deserialization(e))?;
+                let authority_type = reader.read_u8().map_err(DecodeError::deserialization)?;
                 let new_authority = Self::read_coption_pubkey(&mut reader)?;
                 TokenInstruction::SetAuthority {
                     authority_type,
@@ -483,34 +482,34 @@ impl InstructionDecoder for TokenDecoder {
                 }
             }
             7 => {
-                let amount = reader.read_u64().map_err(|e| DecodeError::deserialization(e))?;
+                let amount = reader.read_u64().map_err(DecodeError::deserialization)?;
                 TokenInstruction::MintTo { amount }
             }
             8 => {
-                let amount = reader.read_u64().map_err(|e| DecodeError::deserialization(e))?;
+                let amount = reader.read_u64().map_err(DecodeError::deserialization)?;
                 TokenInstruction::Burn { amount }
             }
             9 => TokenInstruction::CloseAccount,
             10 => TokenInstruction::FreezeAccount,
             11 => TokenInstruction::ThawAccount,
             12 => {
-                let amount = reader.read_u64().map_err(|e| DecodeError::deserialization(e))?;
-                let decimals = reader.read_u8().map_err(|e| DecodeError::deserialization(e))?;
+                let amount = reader.read_u64().map_err(DecodeError::deserialization)?;
+                let decimals = reader.read_u8().map_err(DecodeError::deserialization)?;
                 TokenInstruction::TransferChecked { amount, decimals }
             }
             13 => {
-                let amount = reader.read_u64().map_err(|e| DecodeError::deserialization(e))?;
-                let decimals = reader.read_u8().map_err(|e| DecodeError::deserialization(e))?;
+                let amount = reader.read_u64().map_err(DecodeError::deserialization)?;
+                let decimals = reader.read_u8().map_err(DecodeError::deserialization)?;
                 TokenInstruction::ApproveChecked { amount, decimals }
             }
             14 => {
-                let amount = reader.read_u64().map_err(|e| DecodeError::deserialization(e))?;
-                let decimals = reader.read_u8().map_err(|e| DecodeError::deserialization(e))?;
+                let amount = reader.read_u64().map_err(DecodeError::deserialization)?;
+                let decimals = reader.read_u8().map_err(DecodeError::deserialization)?;
                 TokenInstruction::MintToChecked { amount, decimals }
             }
             15 => {
-                let amount = reader.read_u64().map_err(|e| DecodeError::deserialization(e))?;
-                let decimals = reader.read_u8().map_err(|e| DecodeError::deserialization(e))?;
+                let amount = reader.read_u64().map_err(DecodeError::deserialization)?;
+                let decimals = reader.read_u8().map_err(DecodeError::deserialization)?;
                 TokenInstruction::BurnChecked { amount, decimals }
             }
             17 => TokenInstruction::SyncNative,

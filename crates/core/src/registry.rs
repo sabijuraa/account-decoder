@@ -3,7 +3,7 @@
 //! The registry is the central component that routes decode requests
 //! to the appropriate decoder based on program ID.
 
-use crate::decoder::{AccountDecoder, DecoderIdentity, DecoderInfo, InstructionDecoder};
+use crate::decoder::{AccountDecoder, DecoderInfo, InstructionDecoder};
 use crate::error::{DecodeError, DecodeResult};
 use crate::event::DecodedEvent;
 use solana_sdk::pubkey::Pubkey;
@@ -148,7 +148,7 @@ impl DecoderRegistry {
     ) -> DecodeResult<Box<dyn DecodedEvent>> {
         let decoder = self
             .get_account(program_id)
-            .ok_or_else(|| DecodeError::UnknownProgram(*program_id))?;
+            .ok_or(DecodeError::UnknownProgram(*program_id))?;
 
         decoder.decode_account(data)
     }
@@ -161,7 +161,7 @@ impl DecoderRegistry {
     ) -> DecodeResult<Box<dyn DecodedEvent>> {
         let decoder = self
             .get_instruction(program_id)
-            .ok_or_else(|| DecodeError::UnknownProgram(*program_id))?;
+            .ok_or(DecodeError::UnknownProgram(*program_id))?;
 
         decoder.decode_instruction(data)
     }
@@ -293,6 +293,7 @@ impl RegistryBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::decoder::DecoderIdentity;
     use crate::decoder::DecoderMetadata;
     use crate::event::EventKind;
     use std::any::Any;

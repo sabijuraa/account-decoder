@@ -206,6 +206,62 @@ mod tests {
     use super::*;
 
     #[derive(Debug)]
+    struct Simple;
+
+    impl DecodedEvent for Simple {
+        fn event_kind(&self) -> EventKind {
+            EventKind::Account
+        }
+        fn event_type(&self) -> &'static str {
+            "Simple"
+        }
+        fn program_name(&self) -> &'static str {
+            "test"
+        }
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+    }
+
+    #[test]
+    fn contextual_event_carries_provenance_without_changing_the_event() {
+        // An indexer needs to know which slot an account was read at. Wrapping
+        // rather than widening every event type keeps that out of the decoders.
+        let wrapped = ContextualEvent {
+            event: Simple,
+            slot: Some(250_000_000),
+            signature: Some("5xy".to_string()),
+        };
+
+        assert_eq!(wrapped.event_type(), "Simple", "the inner type shows through");
+        assert_eq!(wrapped.event_kind(), EventKind::Account);
+        assert_eq!(wrapped.program_name(), "test");
+        assert_eq!(wrapped.slot, Some(250_000_000));
+        assert_eq!(wrapped.signature.as_deref(), Some("5xy"));
+    }
+
+    #[test]
+    fn a_partial_event_keeps_the_bytes_it_could_not_decode() {
+        // Graceful degradation: a caller that cannot decode an account should
+        // still be able to say which program it belonged to and hand the raw
+        // bytes on, rather than dropping it.
+        let raw = vec![9u8; 40];
+        let partial = PartialEvent {
+            kind: EventKind::Instruction,
+            program: "unknown-program",
+            raw_data: raw.clone(),
+            discriminator: Some(raw[..8].to_vec()),
+            error_context: "no decoder matched the discriminator".to_string(),
+        };
+
+        assert_eq!(partial.event_type(), "Partial");
+        assert_eq!(partial.event_kind(), EventKind::Instruction);
+        assert_eq!(partial.encoded_size(), Some(40));
+        assert_eq!(partial.discriminator.as_deref(), Some(&raw[..8]));
+        assert!(partial.error_context.contains("no decoder"));
+    }
+
+    #[derive(Debug)]
     struct TestEvent {
         pub value: u64,
     }

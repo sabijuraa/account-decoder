@@ -4,8 +4,8 @@
 //! implementing the decoder traits.
 
 use crate::idl::{IdlAccount, IdlField, IdlInstruction, IdlProgram, IdlTypeDef, IdlTypeDefTy};
-use crate::types::{RustType, TypeMapper};
-use heck::{ToSnakeCase, ToUpperCamelCase};
+use crate::types::TypeMapper;
+use heck::ToUpperCamelCase;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use thiserror::Error;

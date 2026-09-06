@@ -271,6 +271,46 @@ impl<T: AccountDecoder + InstructionDecoder> ProgramDecoder for T {}
 mod tests {
     use super::*;
 
+    /// A decoder that handles both halves of a program, so the blanket
+    /// `ProgramDecoder` impl applies to it.
+    #[derive(Debug)]
+    struct BothHalves;
+
+    impl DecoderIdentity for BothHalves {
+        fn metadata(&self) -> DecoderMetadata {
+            DecoderMetadata::new("both", Pubkey::new_from_array([7u8; 32]))
+        }
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+    }
+
+    impl AccountDecoder for BothHalves {
+        fn decode_account(&self, _data: &[u8]) -> DecodeResult<Box<dyn DecodedEvent>> {
+            Err(crate::error::DecodeError::invalid_format("not needed here"))
+        }
+    }
+
+    impl InstructionDecoder for BothHalves {
+        fn decode_instruction(&self, _data: &[u8]) -> DecodeResult<Box<dyn DecodedEvent>> {
+            Err(crate::error::DecodeError::invalid_format("not needed here"))
+        }
+    }
+
+    #[test]
+    fn implementing_both_halves_gives_you_a_program_decoder_for_free() {
+        // The blanket impl is the whole point: a decoder that covers accounts
+        // and instructions should not have to write a third impl to be treated
+        // as a program.
+        let decoder = BothHalves;
+        assert_eq!(decoder.program_id(), Pubkey::new_from_array([7u8; 32]));
+
+        fn takes_a_program_decoder<D: ProgramDecoder>(d: &D) -> Pubkey {
+            d.program_id()
+        }
+        assert_eq!(takes_a_program_decoder(&decoder), decoder.program_id());
+    }
+
     #[derive(Debug)]
     struct MockDecoder;
 

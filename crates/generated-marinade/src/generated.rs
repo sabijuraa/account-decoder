@@ -2,7 +2,7 @@
 //!
 //! This file was automatically generated. Do not edit manually.
 use account_decoder_core::{
-    AccountDecoder, DecodeError, DecodeResult, DecodedEvent, DecoderCapabilities,
+    AccountDecoder, DecodeError, DecodeResult, DecodedEvent,
     DecoderIdentity, DecoderMetadata, EventKind, InstructionDecoder,
 };
 use borsh::BorshDeserialize;

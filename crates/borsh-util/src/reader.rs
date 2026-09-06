@@ -282,8 +282,8 @@ mod tests {
         assert_eq!(reader.read_u64().unwrap(), 1);
         assert_eq!(reader.read_u8().unwrap(), 255);
         assert_eq!(reader.read_u32().unwrap(), 16);
-        assert_eq!(reader.read_bool().unwrap(), true);
-        assert_eq!(reader.read_bool().unwrap(), false);
+        assert!(reader.read_bool().unwrap());
+        assert!(!reader.read_bool().unwrap());
         assert!(reader.is_empty());
     }
 

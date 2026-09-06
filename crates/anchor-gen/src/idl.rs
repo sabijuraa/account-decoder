@@ -46,7 +46,7 @@ impl IdlParser {
     /// Parse an IDL from a file path.
     pub fn parse_file(path: &std::path::Path) -> IdlResult<IdlProgram> {
         let json = std::fs::read_to_string(path).map_err(|e| {
-            IdlError::InvalidIdl(format!("failed to read file: {}", e))
+            IdlError::InvalidIdl(format!("failed to read file: {e}"))
         })?;
         Self::parse(&json)
     }

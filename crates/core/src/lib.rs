@@ -48,10 +48,11 @@ mod event;
 mod registry;
 
 pub use decoder::{
-    AccountDecoder, DecoderCapabilities, DecoderIdentity, DecoderInfo, DecoderMetadata, InstructionDecoder,
+    AccountDecoder, DecoderCapabilities, DecoderIdentity, DecoderInfo, DecoderMetadata,
+    InstructionDecoder, ProgramDecoder,
 };
 pub use error::{DecodeError, DecodeResult};
-pub use event::{DecodedEvent, EventKind, TypedEvent};
+pub use event::{ContextualEvent, DecodedEvent, EventKind, PartialEvent, TypedEvent};
 pub use registry::{DecoderRegistry, RegistryBuilder};
 
 /// Re-export commonly used types from solana-sdk for convenience.
