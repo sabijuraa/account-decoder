@@ -18,6 +18,8 @@
 //! anchor-gen idl.json -o src/ --minimal
 //! ```
 
+mod decode;
+
 use account_decoder_anchor_gen::{CodeGenerator, GeneratorConfig, IdlParser};
 use anyhow::{Context, Result};
 use clap::{Parser, ValueEnum};
@@ -25,11 +27,56 @@ use std::fs;
 use std::path::PathBuf;
 use tracing::{debug, info, warn};
 
+/// Decode Solana account and instruction data, and generate decoders from IDLs.
+#[derive(Parser, Debug)]
+#[command(name = "account-decoder")]
+#[command(author, version, about, long_about = None)]
+struct Cli {
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(clap::Subcommand, Debug)]
+enum Command {
+    /// Decode account or instruction data with the built-in decoders.
+    Decode(DecodeArgs),
+    /// Generate a decoder from one or more Anchor IDL files.
+    Generate(GenerateArgs),
+}
+
+/// Decode raw data that is already in hand.
+#[derive(Parser, Debug)]
+struct DecodeArgs {
+    /// Program that owns the data, as a base58 pubkey. Omit to try every
+    /// registered decoder and report which ones accept it.
+    #[arg(short, long)]
+    program: Option<String>,
+
+    /// Base64-encoded data. Mutually exclusive with --file.
+    ///
+    /// There is deliberately no option to fetch an account from RPC: this
+    /// project decodes bytes it is given and is not an RPC client. Pipe a
+    /// `getAccountInfo` response into --file instead.
+    #[arg(short, long, conflicts_with = "file")]
+    data: Option<String>,
+
+    /// Read the data from a file. A `getAccountInfo` JSON response is
+    /// understood, as is a file of raw base64.
+    #[arg(short, long, conflicts_with = "data")]
+    file: Option<PathBuf>,
+
+    /// Decode as an instruction rather than an account.
+    #[arg(short, long)]
+    instruction: bool,
+
+    /// Print the decoded value as JSON-ish debug output rather than a summary.
+    #[arg(long)]
+    raw: bool,
+}
+
 /// Generate Solana account decoders from Anchor IDL files.
 #[derive(Parser, Debug)]
-#[command(name = "anchor-gen")]
-#[command(author, version, about, long_about = None)]
-struct Args {
+struct GenerateArgs {
     /// Input IDL file(s) (JSON format)
     #[arg(required = true)]
     input: Vec<PathBuf>,
@@ -81,8 +128,13 @@ enum OutputFormat {
 }
 
 fn main() -> Result<()> {
-    let args = Args::parse();
+    match Cli::parse().command {
+        Command::Decode(args) => decode::run(args),
+        Command::Generate(args) => generate(args),
+    }
+}
 
+fn generate(args: GenerateArgs) -> Result<()> {
     // Initialize logging
     let log_level = if args.quiet {
         tracing::Level::ERROR

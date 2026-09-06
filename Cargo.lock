@@ -123,11 +123,16 @@ name = "anchor-gen-cli"
 version = "0.1.0"
 dependencies = [
  "account-decoder-anchor-gen",
+ "account-decoder-core",
+ "account-decoder-decoders",
+ "account-decoder-sdk",
  "anyhow",
+ "base64 0.22.1",
  "clap",
  "prettyplease",
  "quote",
  "serde_json",
+ "solana-sdk",
  "syn 2.0.119",
  "tracing",
  "tracing-subscriber",

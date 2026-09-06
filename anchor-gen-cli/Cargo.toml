@@ -1,6 +1,6 @@
 [package]
 name = "anchor-gen-cli"
-description = "CLI tool for generating Solana account decoders from Anchor IDL files"
+description = "CLI to decode Solana account data and generate decoders from Anchor IDLs"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,11 +8,16 @@ repository.workspace = true
 rust-version.workspace = true
 
 [[bin]]
-name = "anchor-gen"
+name = "account-decoder"
 path = "src/main.rs"
 
 [dependencies]
 account-decoder-anchor-gen = { workspace = true }
+account-decoder-core = { workspace = true }
+account-decoder-decoders = { workspace = true }
+account-decoder-sdk = { workspace = true }
+solana-sdk = { workspace = true }
+base64 = "0.22"
 clap = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
